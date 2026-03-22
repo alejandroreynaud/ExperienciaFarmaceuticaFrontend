@@ -1,0 +1,30 @@
+/* ═══════════════════════════════════════════════
+   App.module.css
+   Shell principal: sidebar fijo + área de contenido
+   que se desplaza cuando el sidebar está abierto.
+═══════════════════════════════════════════════ */
+
+.shell {
+  min-height: 100vh;
+  background: #f9fafb;       /* gray-50 — fondo general de la app */
+}
+
+/* ── Área principal (header + páginas) ──────── */
+.main {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  transition: margin-left 0.3s ease;
+  margin-left: 0;
+}
+
+/* Cuando el sidebar está abierto, empuja el contenido */
+.shifted {
+  margin-left: 256px;        /* mismo ancho que .sidebar en Sidebar.module.css */
+}
+
+/* ── Contenido de página ────────────────────── */
+.content {
+  flex: 1;
+  padding: 1.5rem;
+}
