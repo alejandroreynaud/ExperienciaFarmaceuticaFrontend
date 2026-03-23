@@ -1,29 +1,29 @@
+
 import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard,
   Package,
   ShoppingCart,
   DollarSign,
-  UserCircle,
   FileText,
+  ClipboardList,
   Pill,
 } from "lucide-react";
 import styles from "../styles/Sidebar.module.css";
 
 const menuItems = [
-  { path: "/",           label: "Dashboard", icon: LayoutDashboard },
+  { path: "/",           label: "Dashboard",  icon: LayoutDashboard },
   { path: "/inventario", label: "Inventario", icon: Package         },
   { path: "/compras",    label: "Compras",    icon: ShoppingCart    },
   { path: "/ventas",     label: "Ventas",     icon: DollarSign      },
-  { path: "/clientes",   label: "Clientes",   icon: UserCircle      },
   { path: "/reportes",   label: "Reportes",   icon: FileText        },
+  //{ path: "/auditoria",  label: "Auditoría",  icon: ClipboardList   },
 ];
 
 export default function Sidebar({ open }) {
   return (
     <aside className={`${styles.sidebar} ${open ? styles.open : styles.closed}`}>
 
-      {/* Logo / Brand */}
       <div className={styles.brand}>
         <div className={styles.brandIcon}>
           <Pill size={22} color="#fff" />
@@ -34,7 +34,6 @@ export default function Sidebar({ open }) {
         </div>
       </div>
 
-      {/* Navegación */}
       <nav className={styles.nav}>
         {menuItems.map((item) => {
           const Icon = item.icon;
