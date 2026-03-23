@@ -1,116 +1,124 @@
-import { useState, useEffect } from "react";
-import { Plus, Search, Edit2, Trash2, FileDown, Filter, X } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Plus, Search, Edit2, Trash2, FileDown, Package, Truck, X } from "lucide-react";
 import {
   getProducts,
-  getCategories,
   createProduct,
   updateProduct,
   deleteProduct,
+  registerLot,
+  getSuppliers,
+  createSupplier,
+  deleteSupplier,
   exportInventoryPDF,
 } from "../services/inventoryService";
 import styles from "../styles/Inventory.module.css";
 
-// ── Formulario vacío reutilizable ────────────────────────────────────────────
-const EMPTY_FORM = {
-  name: "",
-  code: "",
-  description: "",
-  cost: "",
-  price: "",
-  quantity: "",
-  category: "Analgésicos",
-  expiryDate: "",
-};
+const EMPTY_CATALOG  = { name: "", code: "", description: "" };
+const EMPTY_LOT      = { productId: "", quantity: "", cost: "", price: "", expiryDate: "" };
+const EMPTY_SUPPLIER = { name: "", phone: "" };
 
-// ── Skeleton ─────────────────────────────────────────────────────────────────
 function Skeleton({ className }) {
   return <div className={`${styles.skeleton} ${className ?? ""}`} />;
 }
 
-// ── Componente principal ──────────────────────────────────────────────────────
 export default function Inventory() {
   const [products,   setProducts]   = useState([]);
-  const [categories, setCategories] = useState([]);
+  const [suppliers,  setSuppliers]  = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [exporting,  setExporting]  = useState(false);
+  const [search,     setSearch]     = useState("");
 
-  // Filtros
-  const [searchTerm,     setSearchTerm]     = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("all");
+  // Modal catálogo
+  const [showCatalog, setShowCatalog] = useState(false);
+  const [editTarget,  setEditTarget]  = useState(null);
+  const [catalogForm, setCatalogForm] = useState(EMPTY_CATALOG);
+  const [savingCat,   setSavingCat]   = useState(false);
 
-  // Modal agregar / editar
-  const [showModal,   setShowModal]   = useState(false);
-  const [editProduct, setEditProduct] = useState(null); // null = modo agregar
-  const [formData,    setFormData]    = useState(EMPTY_FORM);
-  const [saving,      setSaving]      = useState(false);
+  // Modal lote
+  const [showLot,   setShowLot]   = useState(false);
+  const [lotForm,   setLotForm]   = useState(EMPTY_LOT);
+  const [savingLot, setSavingLot] = useState(false);
 
-  // Modal confirmar eliminación
+  // Modal proveedores
+  const [showSuppliers,  setShowSuppliers]  = useState(false);
+  const [supplierForm,   setSupplierForm]   = useState(EMPTY_SUPPLIER);
+  const [savingSup,      setSavingSup]      = useState(false);
+  const [deletingSupId,  setDeletingSupId]  = useState(null);
+
+  // Modal eliminar producto
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting,     setDeleting]     = useState(false);
 
   // ── Carga inicial ──────────────────────────────────────────────────────────
   useEffect(() => {
-    Promise.all([getProducts(), getCategories()])
-      .then(([prods, cats]) => {
+    Promise.all([getProducts(), getSuppliers()])
+      .then(([prods, sups]) => {
         setProducts(prods);
-        setCategories(cats);
+        setSuppliers(sups);
       })
       .finally(() => setLoading(false));
   }, []);
 
-  // ── Filtrado local ─────────────────────────────────────────────────────────
-  const filtered = products.filter((p) => {
-    const matchSearch =
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.code.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchCat = categoryFilter === "all" || p.category === categoryFilter;
-    return matchSearch && matchCat;
-  });
+  const filtered = products.filter((p) =>
+    p.name.toLowerCase().includes(search.toLowerCase()) ||
+    p.code.toLowerCase().includes(search.toLowerCase())
+  );
 
-  // ── Abrir modal agregar ────────────────────────────────────────────────────
+  // ── Catálogo ───────────────────────────────────────────────────────────────
   function handleOpenAdd() {
-    setEditProduct(null);
-    setFormData(EMPTY_FORM);
-    setShowModal(true);
+    setEditTarget(null);
+    setCatalogForm(EMPTY_CATALOG);
+    setShowCatalog(true);
   }
 
-  // ── Abrir modal editar ─────────────────────────────────────────────────────
   function handleOpenEdit(product) {
-    setEditProduct(product);
-    setFormData({
-      name:        product.name,
-      code:        product.code,
-      description: product.description,
-      cost:        product.cost,
-      price:       product.price,
-      quantity:    product.quantity,
-      category:    product.category,
-      expiryDate:  product.expiryDate,
-    });
-    setShowModal(true);
+    setEditTarget(product);
+    setCatalogForm({ name: product.name, code: product.code, description: product.description });
+    setShowCatalog(true);
   }
 
-  // ── Guardar (crear o editar) ───────────────────────────────────────────────
-  async function handleSave(e) {
+  async function handleSaveCatalog(e) {
     e.preventDefault();
-    setSaving(true);
+    setSavingCat(true);
     try {
-      if (editProduct) {
-        const updated = await updateProduct(editProduct.id, formData);
-        setProducts((prev) =>
-          prev.map((p) => (p.id === editProduct.id ? { ...p, ...updated } : p))
-        );
+      if (editTarget) {
+        const updated = await updateProduct(editTarget.id, catalogForm);
+        setProducts((prev) => prev.map((p) => (p.id === editTarget.id ? { ...p, ...updated } : p)));
       } else {
-        const created = await createProduct(formData);
+        const created = await createProduct(catalogForm);
         setProducts((prev) => [...prev, created]);
       }
-      setShowModal(false);
+      setShowCatalog(false);
     } finally {
-      setSaving(false);
+      setSavingCat(false);
     }
   }
 
-  // ── Confirmar eliminación ──────────────────────────────────────────────────
+  // ── Lote ───────────────────────────────────────────────────────────────────
+  function handleOpenLot() {
+    setLotForm({ ...EMPTY_LOT, productId: products[0]?.id ?? "" });
+    setShowLot(true);
+  }
+
+  async function handleSaveLot(e) {
+    e.preventDefault();
+    setSavingLot(true);
+    try {
+      await registerLot(lotForm);
+      setProducts((prev) =>
+        prev.map((p) =>
+          p.id === Number(lotForm.productId)
+            ? { ...p, quantity: p.quantity + Number(lotForm.quantity), cost: Number(lotForm.cost), price: Number(lotForm.price), expiryDate: lotForm.expiryDate }
+            : p
+        )
+      );
+      setShowLot(false);
+    } finally {
+      setSavingLot(false);
+    }
+  }
+
+  // ── Eliminar producto ──────────────────────────────────────────────────────
   async function handleConfirmDelete() {
     if (!deleteTarget) return;
     setDeleting(true);
@@ -123,23 +131,41 @@ export default function Inventory() {
     }
   }
 
-  // ── Exportar PDF ───────────────────────────────────────────────────────────
-  async function handleExportPDF() {
+  // ── Proveedores ────────────────────────────────────────────────────────────
+  async function handleSaveSupplier(e) {
+    e.preventDefault();
+    setSavingSup(true);
+    try {
+      const created = await createSupplier(supplierForm);
+      setSuppliers((prev) => [...prev, created]);
+      setSupplierForm(EMPTY_SUPPLIER);
+    } finally {
+      setSavingSup(false);
+    }
+  }
+
+  async function handleDeleteSupplier(id) {
+    setDeletingSupId(id);
+    try {
+      await deleteSupplier(id);
+      setSuppliers((prev) => prev.filter((s) => s.id !== id));
+    } finally {
+      setDeletingSupId(null);
+    }
+  }
+
+  // ── Exportar ───────────────────────────────────────────────────────────────
+  async function handleExport() {
     setExporting(true);
     try {
       await exportInventoryPDF();
-      // TODO: cuando el backend devuelva un blob, reemplazar por:
-      // const blob = await exportInventoryPDF();
-      // const url = URL.createObjectURL(blob);
-      // window.open(url);
       alert("PDF exportado correctamente");
     } finally {
       setExporting(false);
     }
   }
 
-  // ── Badge de cantidad ──────────────────────────────────────────────────────
-  function quantityBadgeClass(qty) {
+  function qtyClass(qty) {
     if (qty < 50)  return styles.badgeRed;
     if (qty < 100) return styles.badgeOrange;
     return styles.badgeGreen;
@@ -156,13 +182,17 @@ export default function Inventory() {
           <p className={styles.subtitle}>Gestiona los productos de la farmacia</p>
         </div>
         <div className={styles.headerActions}>
-          <button
-            className={styles.btnSecondary}
-            onClick={handleExportPDF}
-            disabled={exporting}
-          >
+          <button className={styles.btnSuccess} onClick={handleExport} disabled={exporting}>
             <FileDown size={18} />
             {exporting ? "Exportando..." : "Exportar PDF"}
+          </button>
+          <button className={styles.btnTeal} onClick={() => setShowSuppliers(true)}>
+            <Truck size={18} />
+            Proveedores
+          </button>
+          <button className={styles.btnSecondary} onClick={handleOpenLot}>
+            <Package size={18} />
+            Registrar Lote
           </button>
           <button className={styles.btnPrimary} onClick={handleOpenAdd}>
             <Plus size={18} />
@@ -171,30 +201,17 @@ export default function Inventory() {
         </div>
       </div>
 
-      {/* Búsqueda y filtros */}
+      {/* Búsqueda */}
       <div className={styles.filterCard}>
         <div className={styles.searchWrap}>
           <Search size={18} className={styles.searchIcon} />
           <input
             type="text"
             placeholder="Buscar por nombre o código..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
             className={styles.searchInput}
           />
-        </div>
-        <div className={styles.selectWrap}>
-          <Filter size={18} className={styles.selectIcon} />
-          <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            className={styles.select}
-          >
-            <option value="all">Todas las categorías</option>
-            {categories.map((cat) => (
-              <option key={cat} value={cat}>{cat}</option>
-            ))}
-          </select>
         </div>
       </div>
 
@@ -211,7 +228,6 @@ export default function Inventory() {
                 <th>Costo</th>
                 <th>Precio</th>
                 <th>Cantidad</th>
-                <th>Categoría</th>
                 <th>Vencimiento</th>
                 <th>Acciones</th>
               </tr>
@@ -227,52 +243,32 @@ export default function Inventory() {
                       <td><Skeleton className={styles.skeletonTextSm} /></td>
                       <td><Skeleton className={styles.skeletonTextSm} /></td>
                       <td><Skeleton className={styles.skeletonBadge} /></td>
-                      <td><Skeleton className={styles.skeletonText} /></td>
                       <td><Skeleton className={styles.skeletonTextSm} /></td>
                       <td><Skeleton className={styles.skeletonActions} /></td>
                     </tr>
                   ))
                 : filtered.length === 0
-                ? (
-                    <tr>
-                      <td colSpan={10} className={styles.emptyRow}>
-                        No se encontraron productos
-                      </td>
-                    </tr>
-                  )
-                : filtered.map((product) => (
-                    <tr key={product.id}>
+                ? <tr><td colSpan={9} className={styles.emptyRow}>No se encontraron productos</td></tr>
+                : filtered.map((p) => (
+                    <tr key={p.id}>
+                      <td><div className={styles.productImage}>{p.image}</div></td>
+                      <td className={styles.productName}>{p.name}</td>
+                      <td className={styles.muted}>{p.code}</td>
+                      <td className={styles.description}>{p.description}</td>
+                      <td className={styles.muted}>L. {Number(p.cost).toFixed(2)}</td>
+                      <td className={styles.price}>L. {Number(p.price).toFixed(2)}</td>
                       <td>
-                        <div className={styles.productImage}>
-                          {product.image}
-                        </div>
-                      </td>
-                      <td className={styles.productName}>{product.name}</td>
-                      <td className={styles.muted}>{product.code}</td>
-                      <td className={styles.description}>{product.description}</td>
-                      <td className={styles.muted}>L. {Number(product.cost).toFixed(2)}</td>
-                      <td className={styles.price}>L. {Number(product.price).toFixed(2)}</td>
-                      <td>
-                        <span className={`${styles.badge} ${quantityBadgeClass(product.quantity)}`}>
-                          {product.quantity}
+                        <span className={`${styles.badge} ${qtyClass(p.quantity)}`}>
+                          {p.quantity}
                         </span>
                       </td>
-                      <td className={styles.muted}>{product.category}</td>
-                      <td className={styles.muted}>{product.expiryDate}</td>
+                      <td className={styles.muted}>{p.expiryDate || "—"}</td>
                       <td>
                         <div className={styles.actions}>
-                          <button
-                            className={styles.btnEdit}
-                            onClick={() => handleOpenEdit(product)}
-                            title="Editar"
-                          >
+                          <button className={styles.btnEdit} onClick={() => handleOpenEdit(p)} title="Editar">
                             <Edit2 size={15} />
                           </button>
-                          <button
-                            className={styles.btnDelete}
-                            onClick={() => setDeleteTarget(product)}
-                            title="Eliminar"
-                          >
+                          <button className={styles.btnDelete} onClick={() => setDeleteTarget(p)} title="Eliminar">
                             <Trash2 size={15} />
                           </button>
                         </div>
@@ -284,125 +280,33 @@ export default function Inventory() {
         </div>
       </div>
 
-      {/* ── Modal agregar / editar ── */}
-      {showModal && (
-        <div className={styles.modalOverlay} onClick={() => setShowModal(false)}>
+      {/* ── Modal Catálogo ── */}
+      {showCatalog && (
+        <div className={styles.modalOverlay} onClick={() => setShowCatalog(false)}>
           <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
             <div className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>
-                {editProduct ? "Editar Producto" : "Nuevo Producto"}
-              </h2>
-              <button className={styles.modalClose} onClick={() => setShowModal(false)}>
-                <X size={20} />
-              </button>
+              <h2 className={styles.modalTitle}>{editTarget ? "Editar Producto" : "Nuevo Producto"}</h2>
+              <button className={styles.modalClose} onClick={() => setShowCatalog(false)}><X size={20} /></button>
             </div>
-
-            <form onSubmit={handleSave} className={styles.modalForm}>
+            <form onSubmit={handleSaveCatalog} className={styles.modalForm}>
               <div className={styles.formGrid}>
-
                 <div className={styles.formGroup}>
                   <label>Nombre del Producto</label>
-                  <input
-                    type="text"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    required
-                  />
+                  <input type="text" value={catalogForm.name} onChange={(e) => setCatalogForm({ ...catalogForm, name: e.target.value })} placeholder="Paracetamol 500mg" required />
                 </div>
-
                 <div className={styles.formGroup}>
                   <label>Código</label>
-                  <input
-                    type="text"
-                    value={formData.code}
-                    onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                    required
-                  />
+                  <input type="text" value={catalogForm.code} onChange={(e) => setCatalogForm({ ...catalogForm, code: e.target.value })} placeholder="MED-001" required />
                 </div>
-
                 <div className={`${styles.formGroup} ${styles.colSpan2}`}>
                   <label>Descripción</label>
-                  <textarea
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    rows={3}
-                    required
-                  />
+                  <textarea value={catalogForm.description} onChange={(e) => setCatalogForm({ ...catalogForm, description: e.target.value })} rows={3} placeholder="Descripción del producto..." required />
                 </div>
-
-                <div className={styles.formGroup}>
-                  <label>Costo (L.)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={formData.cost}
-                    onChange={(e) => setFormData({ ...formData, cost: e.target.value })}
-                    required
-                  />
-                </div>
-
-                <div className={styles.formGroup}>
-                  <label>Precio (L.)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={formData.price}
-                    onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                    required
-                  />
-                </div>
-
-                <div className={styles.formGroup}>
-                  <label>Cantidad</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={formData.quantity}
-                    onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
-                    required
-                  />
-                </div>
-
-                <div className={styles.formGroup}>
-                  <label>Categoría</label>
-                  <select
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  >
-                    {categories.map((cat) => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className={styles.formGroup}>
-                  <label>Fecha de Vencimiento</label>
-                  <input
-                    type="date"
-                    value={formData.expiryDate}
-                    onChange={(e) => setFormData({ ...formData, expiryDate: e.target.value })}
-                    required
-                  />
-                </div>
-
               </div>
-
               <div className={styles.modalFooter}>
-                <button
-                  type="button"
-                  className={styles.btnOutline}
-                  onClick={() => setShowModal(false)}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className={styles.btnPrimary}
-                  disabled={saving}
-                >
-                  {saving ? "Guardando..." : editProduct ? "Guardar Cambios" : "Agregar Producto"}
+                <button type="button" className={styles.btnOutline} onClick={() => setShowCatalog(false)}>Cancelar</button>
+                <button type="submit" className={styles.btnPrimary} disabled={savingCat}>
+                  {savingCat ? "Guardando..." : editTarget ? "Guardar Cambios" : "Agregar Producto"}
                 </button>
               </div>
             </form>
@@ -410,31 +314,148 @@ export default function Inventory() {
         </div>
       )}
 
-      {/* ── Modal confirmar eliminación ── */}
+      {/* ── Modal Lote ── */}
+      {showLot && (
+        <div className={styles.modalOverlay} onClick={() => setShowLot(false)}>
+          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h2 className={styles.modalTitle}>Registrar Lote</h2>
+              <button className={styles.modalClose} onClick={() => setShowLot(false)}><X size={20} /></button>
+            </div>
+            <form onSubmit={handleSaveLot} className={styles.modalForm}>
+              <div className={styles.formGrid}>
+                <div className={`${styles.formGroup} ${styles.colSpan2}`}>
+                  <label>Producto</label>
+                  <select value={lotForm.productId} onChange={(e) => setLotForm({ ...lotForm, productId: e.target.value })} required>
+                    <option value="">Selecciona un producto...</option>
+                    {products.map((p) => (
+                      <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className={styles.formGroup}>
+                  <label>Cantidad</label>
+                  <input type="number" min="1" value={lotForm.quantity} onChange={(e) => setLotForm({ ...lotForm, quantity: e.target.value })} placeholder="0" required />
+                </div>
+                <div className={styles.formGroup}>
+                  <label>Fecha de Vencimiento</label>
+                  <input type="date" value={lotForm.expiryDate} onChange={(e) => setLotForm({ ...lotForm, expiryDate: e.target.value })} required />
+                </div>
+                <div className={styles.formGroup}>
+                  <label>Costo unitario (L.)</label>
+                  <input type="number" step="0.01" min="0" value={lotForm.cost} onChange={(e) => setLotForm({ ...lotForm, cost: e.target.value })} placeholder="0.00" required />
+                </div>
+                <div className={styles.formGroup}>
+                  <label>Precio de venta (L.)</label>
+                  <input type="number" step="0.01" min="0" value={lotForm.price} onChange={(e) => setLotForm({ ...lotForm, price: e.target.value })} placeholder="0.00" required />
+                </div>
+              </div>
+              <div className={styles.modalFooter}>
+                <button type="button" className={styles.btnOutline} onClick={() => setShowLot(false)}>Cancelar</button>
+                <button type="submit" className={styles.btnSecondary} disabled={savingLot}>
+                  {savingLot ? "Registrando..." : "Registrar Lote"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal Proveedores ── */}
+      {showSuppliers && (
+        <div className={styles.modalOverlay} onClick={() => setShowSuppliers(false)}>
+          <div className={styles.modalWide} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h2 className={styles.modalTitle}>Proveedores</h2>
+              <button className={styles.modalClose} onClick={() => setShowSuppliers(false)}><X size={20} /></button>
+            </div>
+            <div className={styles.suppliersBody}>
+
+              {/* Formulario agregar proveedor */}
+              <form onSubmit={handleSaveSupplier} className={styles.supplierForm}>
+                <div className={styles.supplierFormGrid}>
+                  <div className={styles.formGroup}>
+                    <label>Nombre del Proveedor</label>
+                    <input
+                      type="text"
+                      value={supplierForm.name}
+                      onChange={(e) => setSupplierForm({ ...supplierForm, name: e.target.value })}
+                      placeholder="Distribuidora Médica SA"
+                      required
+                    />
+                  </div>
+                  <div className={styles.formGroup}>
+                    <label>Teléfono</label>
+                    <input
+                      type="text"
+                      value={supplierForm.phone}
+                      onChange={(e) => setSupplierForm({ ...supplierForm, phone: e.target.value })}
+                      placeholder="2221-0001"
+                      required
+                    />
+                  </div>
+                  <div className={styles.supplierAddBtn}>
+                    <button type="submit" className={styles.btnPrimary} disabled={savingSup}>
+                      <Plus size={16} />
+                      {savingSup ? "Agregando..." : "Agregar"}
+                    </button>
+                  </div>
+                </div>
+              </form>
+
+              {/* Tabla de proveedores */}
+              <div className={styles.tableCard}>
+                <div className={styles.tableWrap}>
+                  <table className={styles.table}>
+                    <thead>
+                      <tr>
+                        <th>Nombre</th>
+                        <th>Teléfono</th>
+                        <th>Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {suppliers.length === 0
+                        ? <tr><td colSpan={3} className={styles.emptyRow}>No hay proveedores registrados</td></tr>
+                        : suppliers.map((s) => (
+                            <tr key={s.id}>
+                              <td className={styles.productName}>{s.name}</td>
+                              <td className={styles.muted}>{s.phone}</td>
+                              <td>
+                                <button
+                                  className={styles.btnDelete}
+                                  onClick={() => handleDeleteSupplier(s.id)}
+                                  disabled={deletingSupId === s.id}
+                                  title="Eliminar proveedor"
+                                >
+                                  <Trash2 size={15} />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal Confirmar Eliminación de Producto ── */}
       {deleteTarget && (
         <div className={styles.modalOverlay} onClick={() => setDeleteTarget(null)}>
           <div className={styles.modalConfirm} onClick={(e) => e.stopPropagation()}>
-            <div className={styles.confirmIcon}>
-              <Trash2 size={28} color="#dc2626" />
-            </div>
-            <h3 className={styles.confirmTitle}>¿Eliminar producto?</h3>
+            <div className={styles.confirmIcon}><Trash2 size={28} color="#dc2626" /></div>
+            <h3 className={styles.confirmTitle}>Retirar producto?</h3>
             <p className={styles.confirmMsg}>
-              Estás a punto de eliminar <strong>{deleteTarget.name}</strong>.
-              Esta acción no se puede deshacer.
+              Estás a punto de retirar <strong>{deleteTarget.name}</strong>. Esta acción no se puede deshacer.
             </p>
             <div className={styles.confirmActions}>
-              <button
-                className={styles.btnOutline}
-                onClick={() => setDeleteTarget(null)}
-              >
-                Cancelar
-              </button>
-              <button
-                className={styles.btnDanger}
-                onClick={handleConfirmDelete}
-                disabled={deleting}
-              >
-                {deleting ? "Eliminando..." : "Sí, eliminar"}
+              <button className={styles.btnOutline} onClick={() => setDeleteTarget(null)}>Cancelar</button>
+              <button className={styles.btnDanger} onClick={handleConfirmDelete} disabled={deleting}>
+                {deleting ? "Retirando..." : "Sí, retirar"}
               </button>
             </div>
           </div>
