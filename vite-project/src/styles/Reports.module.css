@@ -1,0 +1,155 @@
+/* ═══════════════════════════════════════════════
+   Reports.module.css
+═══════════════════════════════════════════════ */
+
+.page {
+  display: flex; flex-direction: column;
+  gap: 1.5rem; background: transparent;
+}
+
+/* ── Encabezado ─────────────────────────────── */
+.pageHeader { display: flex; flex-direction: column; gap: 0.25rem; }
+.title    { font-size: 1.875rem; font-weight: 700; color: #111827; margin: 0; }
+.subtitle { font-size: 0.875rem; color: #6b7280; margin: 0; }
+
+/* ── Controles ──────────────────────────────── */
+.controlsCard {
+  background: #fff; border-radius: 0.75rem; border: 1px solid #f3f4f6;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05); padding: 1.25rem 1.5rem;
+}
+
+.controlsGrid {
+  display: grid; grid-template-columns: 1fr;
+  gap: 1rem; align-items: flex-end;
+}
+@media (min-width: 640px)  { .controlsGrid { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 1024px) { .controlsGrid { grid-template-columns: 2fr 1fr 1fr auto; } }
+
+.formGroup { display: flex; flex-direction: column; gap: 0.375rem; }
+.formGroup label { font-size: 0.8125rem; font-weight: 500; color: #374151; }
+.formGroup select,
+.formGroup input {
+  padding: 0.6rem 0.875rem; border: 1px solid #d1d5db;
+  border-radius: 0.5rem; font-size: 0.875rem; color: #111827;
+  outline: none; background: #fff; width: 100%;
+  box-sizing: border-box; transition: border-color 0.15s, box-shadow 0.15s;
+}
+.formGroup select:focus,
+.formGroup input:focus {
+  border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+}
+
+.formGroupBtn { display: flex; align-items: flex-end; }
+
+.btnDownload {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.6rem 1.25rem; background: #16a34a; color: #fff;
+  border: none; border-radius: 0.5rem; font-size: 0.875rem;
+  font-weight: 500; cursor: pointer; transition: background 0.15s;
+  white-space: nowrap; width: 100%; justify-content: center;
+}
+.btnDownload:hover:not(:disabled) { background: #15803d; }
+.btnDownload:disabled { opacity: 0.65; cursor: not-allowed; }
+
+/* ── Tarjetas resumen ───────────────────────── */
+.summaryGrid3 {
+  display: grid; grid-template-columns: 1fr; gap: 1.5rem;
+}
+@media (min-width: 768px) { .summaryGrid3 { grid-template-columns: repeat(3, 1fr); } }
+
+.summaryCard {
+  background: #fff; border-radius: 0.75rem; border: 1px solid #f3f4f6;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  padding: 1.5rem; display: flex; flex-direction: column; gap: 0.375rem;
+}
+
+.summaryLabel      { font-size: 0.875rem; color: #6b7280; margin: 0; }
+.summaryValue      { font-size: 1.75rem; font-weight: 700; color: #111827; margin: 0; }
+.summaryTrendGreen { font-size: 0.875rem; color: #16a34a; margin: 0; }
+.summaryTrendMuted { font-size: 0.875rem; color: #9ca3af; margin: 0; }
+.summaryTrendBlue  { font-size: 0.875rem; color: #2563eb; margin: 0; }
+.summaryTrendOrange{ font-size: 0.875rem; color: #f97316; margin: 0; }
+.valueBlue         { color: #2563eb; }
+.valueOrange       { color: #f97316; }
+
+/* ── Gráficas ───────────────────────────────── */
+.chartsGrid {
+  display: grid; grid-template-columns: 1fr; gap: 1.5rem;
+}
+@media (min-width: 1024px) { .chartsGrid { grid-template-columns: repeat(2, 1fr); } }
+
+.chartCard {
+  background: #fff; border-radius: 0.75rem; border: 1px solid #f3f4f6;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05); padding: 1.5rem;
+}
+.chartTitle { font-size: 1rem; font-weight: 600; color: #111827; margin: 0 0 1rem; }
+
+/* ── Lista de categorías ────────────────────── */
+.categoryList { display: flex; flex-direction: column; gap: 0.625rem; }
+.categoryRow {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.75rem 1rem; background: #f9fafb; border-radius: 0.5rem;
+}
+.categoryName  { font-weight: 500; color: #111827; font-size: 0.875rem; margin: 0; }
+.categoryCount { font-size: 0.75rem; color: #6b7280; margin: 0; }
+.categoryValue { font-weight: 600; color: #2563eb; font-size: 0.875rem; }
+
+/* ── Banner de alerta ───────────────────────── */
+.alertBanner {
+  display: flex; align-items: flex-start; gap: 1rem;
+  background: #fef2f2; border: 1px solid #fecaca;
+  border-radius: 0.75rem; padding: 1.25rem 1.5rem;
+}
+.alertTitle { font-size: 1rem; font-weight: 600; color: #991b1b; margin: 0; }
+.alertMsg   { font-size: 0.875rem; color: #b91c1c; margin: 0.25rem 0 0; }
+
+/* ── Tabla ──────────────────────────────────── */
+.tableCard {
+  background: #fff; border-radius: 0.75rem; border: 1px solid #f3f4f6;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: hidden;
+}
+.tableHeader {
+  padding: 1.25rem 1.5rem; border-bottom: 1px solid #f3f4f6;
+}
+.tableTitle { font-size: 1rem; font-weight: 600; color: #111827; margin: 0; }
+.tableWrap  { overflow-x: auto; }
+
+.table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+.table thead tr { background: #f9fafb; border-bottom: 1px solid #e5e7eb; }
+.table th {
+  padding: 0.875rem 1.25rem; text-align: left;
+  font-size: 0.8125rem; font-weight: 600; color: #374151; white-space: nowrap;
+}
+.table tbody tr { border-bottom: 1px solid #f3f4f6; transition: background 0.12s; }
+.table tbody tr:last-child { border-bottom: none; }
+.table tbody tr:hover { background: #f9fafb; }
+.table td { padding: 0.875rem 1.25rem; vertical-align: middle; }
+
+.productName { font-weight: 500; color: #111827; }
+.muted       { color: #6b7280; }
+
+/* Badges */
+.badge {
+  display: inline-block; padding: 0.25rem 0.625rem;
+  border-radius: 9999px; font-size: 0.8rem; font-weight: 500;
+}
+.badgeRed    { background: #fee2e2; color: #b91c1c; }
+.badgeOrange { background: #ffedd5; color: #c2410c; }
+.badgeYellow { background: #fef9c3; color: #92400e; }
+
+/* ── Skeletons ──────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position:  400px 0; }
+}
+.skeleton {
+  border-radius: 0.375rem;
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 800px 100%; animation: shimmer 1.4s infinite linear;
+}
+.skeletonIcon  { width: 32px;  height: 32px; border-radius: 50%; }
+.skeletonLabel { height: 14px; width: 60%;  margin-top: 0.5rem; }
+.skeletonValue { height: 28px; width: 75%;  margin-top: 0.25rem; }
+.skeletonTrend { height: 12px; width: 50%; }
+.skeletonChart { height: 300px; width: 100%; margin-top: 0.5rem; }
+.skeletonText  { height: 14px; width: 75%; }
