@@ -2,288 +2,202 @@
    Dashboard.module.css
 ═══════════════════════════════════════════════ */
 
-/* ── Layout general ─────────────────────────── */
 .page {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-  background: transparent;
+  display: flex; flex-direction: column;
+  gap: 1.5rem; background: transparent;
 }
 
 /* ── Encabezado ─────────────────────────────── */
-.header {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
+.header  { display: flex; flex-direction: column; gap: 0.25rem; }
+.title   { font-size: 1.875rem; font-weight: 700; color: #111827; margin: 0; }
+.subtitle{ font-size: 0.875rem; color: #6b7280; margin: 0; }
 
-.title {
-  font-size: 1.875rem;
-  font-weight: 700;
-  color: #111827;
-  margin: 0;
-}
-
-.subtitle {
-  font-size: 0.875rem;
-  color: #6b7280;
-  margin: 0;
-}
-
-/* ── Grid de tarjetas de stats ──────────────── */
-.statsGrid {
-  display: grid;
-  grid-template-columns: repeat(1, 1fr);
-  gap: 1.5rem;
-}
-
-@media (min-width: 768px) {
-  .statsGrid { grid-template-columns: repeat(2, 1fr); }
-}
-
-@media (min-width: 1024px) {
-  .statsGrid { grid-template-columns: repeat(4, 1fr); }
-}
+/* ── Stats grid ─────────────────────────────── */
+.statsGrid { display: grid; grid-template-columns: repeat(1,1fr); gap: 1.5rem; }
+@media (min-width:768px)  { .statsGrid { grid-template-columns: repeat(2,1fr); } }
+@media (min-width:1024px) { .statsGrid { grid-template-columns: repeat(4,1fr); } }
 
 .statCard {
-  background: #ffffff;
-  border-radius: 0.75rem;
-  border: 1px solid #f3f4f6;
-  padding: 1.5rem;
-  display: flex;
-  align-items: flex-start;
+  background: #fff; border-radius: 0.75rem; border: 1px solid #f3f4f6;
+  padding: 1.5rem; display: flex; align-items: flex-start;
   justify-content: space-between;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  transition: box-shadow 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05); transition: box-shadow 0.2s;
 }
+.statCard:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+.statContent   { display: flex; flex-direction: column; gap: 0.25rem; }
+.statLabel     { font-size: 0.875rem; color: #6b7280; margin: 0; }
+.statValue     { font-size: 1.5rem; font-weight: 700; color: #111827; margin: 0.25rem 0 0; }
+.statTrend     { font-size: 0.875rem; color: #9ca3af; margin: 0; }
+.statIcon      { padding: 0.75rem; border-radius: 0.5rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.icon_green    { background: #22c55e; }
+.icon_orange   { background: #f97316; }
+.icon_red      { background: #ef4444; }
+.icon_blue     { background: #3b82f6; }
 
-.statCard:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-}
-
-.statContent {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.statLabel {
-  font-size: 0.875rem;
-  color: #6b7280;
-  margin: 0;
-}
-
-.statValue {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: #111827;
-  margin: 0.25rem 0 0;
-}
-
-.statTrend {
-  font-size: 0.875rem;
-  color: #9ca3af;
-  margin: 0;
-}
-
-.statIcon {
-  padding: 0.75rem;
-  border-radius: 0.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-/* Colores de iconos — coinciden con card.color del servicio */
-.icon_green  { background-color: #22c55e; }
-.icon_orange { background-color: #f97316; }
-.icon_red    { background-color: #ef4444; }
-.icon_blue   { background-color: #3b82f6; }
-
-/* ── Grid de gráficas ───────────────────────── */
-.chartsGrid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 1.5rem;
-}
-
-@media (min-width: 1024px) {
-  .chartsGrid { grid-template-columns: repeat(2, 1fr); }
-}
+/* ── Charts grid ────────────────────────────── */
+.chartsGrid { display: grid; grid-template-columns: 1fr; gap: 1.5rem; }
+@media (min-width:1024px) { .chartsGrid { grid-template-columns: repeat(2,1fr); } }
 
 /* ── Card genérica ──────────────────────────── */
 .card {
-  background: #ffffff;
-  border-radius: 0.75rem;
-  border: 1px solid #f3f4f6;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  padding: 1.5rem;
-  overflow: hidden;
+  background: #fff; border-radius: 0.75rem; border: 1px solid #f3f4f6;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05); padding: 1.5rem; overflow: hidden;
 }
+.card.cardWide { padding: 0; }
+.cardHeader    { padding: 1.25rem 1.5rem; border-bottom: 1px solid #f3f4f6; }
+.cardBody      { padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
+.cardTitle     { font-size: 1rem; font-weight: 600; color: #111827; margin: 0 0 1rem; }
+.cardHeader .cardTitle { margin: 0; }
 
-.card.cardWide {
-  padding: 0;
-}
+/* ── Bottom grid ────────────────────────────── */
+.bottomGrid { display: grid; grid-template-columns: 1fr; gap: 1.5rem; }
+@media (min-width:1024px) { .bottomGrid { grid-template-columns: 2fr 1fr; } }
 
-.cardHeader {
-  padding: 1.25rem 1.5rem;
-  border-bottom: 1px solid #f3f4f6;
-}
+/* ── Stock rows ─────────────────────────────── */
+.stockRow    { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.stockInfo   { flex: 1; }
+.stockName   { font-weight: 500; color: #111827; font-size: 0.875rem; margin: 0 0 0.5rem; }
+.progressBar { height: 0.5rem; background: #e5e7eb; border-radius: 9999px; overflow: hidden; }
+.progressFill{ height: 100%; background: #f97316; border-radius: 9999px; transition: width 0.4s; }
+.stockNumbers{ font-size: 0.875rem; font-weight: 600; color: #f97316; white-space: nowrap; }
 
-.cardBody {
-  padding: 1.25rem 1.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.cardTitle {
-  font-size: 1rem;
-  font-weight: 600;
-  color: #111827;
-  margin: 0 0 1rem;
-}
-
-.cardHeader .cardTitle {
-  margin: 0;
-}
-
-/* ── Fila inferior ──────────────────────────── */
-.bottomGrid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 1.5rem;
-}
-
-@media (min-width: 1024px) {
-  .bottomGrid { grid-template-columns: 2fr 1fr; }
-}
-
-/* ── Tabla de bajo stock ────────────────────── */
-.stockRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.stockInfo {
-  flex: 1;
-}
-
-.stockName {
-  font-weight: 500;
-  color: #111827;
-  font-size: 0.875rem;
-  margin: 0 0 0.5rem;
-}
-
-.progressBar {
-  height: 0.5rem;
-  background: #e5e7eb;
-  border-radius: 9999px;
-  overflow: hidden;
-}
-
-.progressFill {
-  height: 100%;
-  background: #f97316;
-  border-radius: 9999px;
-  transition: width 0.4s ease;
-}
-
-.stockNumbers {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: #f97316;
-  white-space: nowrap;
-}
-
-/* ── Panel de notificaciones ────────────────── */
-.notifList {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  max-height: 24rem;
-  overflow-y: auto;
-  padding: 1rem;
-}
+/* ── Notificaciones ─────────────────────────── */
+.notifList { display: flex; flex-direction: column; gap: 0.75rem; max-height: 24rem; overflow-y: auto; padding: 1rem; }
 
 .notifItem {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-  padding: 0.75rem;
-  border-radius: 0.5rem;
-  border: 1px solid #f3f4f6;
-  transition: background 0.15s ease;
+  display: flex; align-items: flex-start; gap: 0.75rem;
+  padding: 0.75rem; border-radius: 0.5rem;
+  border: 1px solid #f3f4f6; transition: background 0.15s;
+}
+.notifItem:hover { background: #f9fafb; }
+
+.notifClickable {
+  cursor: pointer;
+}
+.notifClickable:hover {
+  background: #f0f9ff;
+  border-color: #bae6fd;
 }
 
-.notifItem:hover {
-  background: #f9fafb;
-}
+.notifIconWrap  { padding: 0.5rem; border-radius: 0.5rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.notifWarning   { background: #fff7ed; color: #ea580c; }
+.notifDanger    { background: #fef2f2; color: #dc2626; }
+.notifSuccess   { background: #f0fdf4; color: #16a34a; }
+.notifInfo      { background: #eff6ff; color: #2563eb; }
 
-.notifIconWrap {
-  padding: 0.5rem;
-  border-radius: 0.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
+.notifText      { flex: 1; min-width: 0; }
 
-.notifWarning { background: #fff7ed; color: #ea580c; }
-.notifDanger  { background: #fef2f2; color: #dc2626; }
-.notifSuccess { background: #f0fdf4; color: #16a34a; }
-.notifInfo    { background: #eff6ff; color: #2563eb; }
+.notifTitleRow  { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.notifTitle     { font-size: 0.875rem; font-weight: 600; color: #111827; margin: 0; }
+.notifDetailHint{ font-size: 0.75rem; color: #2563eb; white-space: nowrap; flex-shrink: 0; }
 
-.notifText    { flex: 1; min-width: 0; }
-
-.notifTitle {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: #111827;
-  margin: 0;
-}
-
-.notifMessage {
-  font-size: 0.75rem;
-  color: #6b7280;
-  margin: 0.2rem 0 0;
-}
-
-.notifTime {
-  font-size: 0.75rem;
-  color: #9ca3af;
-  margin: 0.2rem 0 0;
-}
+.notifMessage   { font-size: 0.75rem; color: #6b7280; margin: 0.2rem 0 0; }
+.notifTime      { font-size: 0.75rem; color: #9ca3af; margin: 0.2rem 0 0; }
 
 /* ══════════════════════════════════════════════
-   Skeletons de carga
+   Modales de detalle
+══════════════════════════════════════════════ */
+.modalOverlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 50; padding: 1rem;
+}
+
+.modal {
+  background: #fff; border-radius: 0.875rem;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+  width: 100%; max-width: 520px; max-height: 90vh;
+  overflow-y: auto; display: flex; flex-direction: column;
+}
+
+.modalHeader {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 1.25rem 1.5rem; border-bottom: 1px solid #f3f4f6; flex-shrink: 0;
+}
+.modalHeaderLeft  { display: flex; align-items: center; gap: 0.75rem; }
+.modalHeaderIcon  {
+  width: 36px; height: 36px; border-radius: 0.5rem;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.iconOrangeBg { background: #fff7ed; }
+.iconRedBg    { background: #fef2f2; }
+
+.modalTitle {
+  font-size: 1.0625rem; font-weight: 700; color: #111827; margin: 0;
+}
+.modalClose {
+  background: transparent; border: none; color: #6b7280;
+  cursor: pointer; padding: 0.25rem; border-radius: 0.375rem;
+  display: flex; align-items: center; transition: color 0.12s;
+}
+.modalClose:hover { color: #111827; }
+
+.modalBody {
+  padding: 1.25rem 1.5rem;
+  display: flex; flex-direction: column; gap: 1rem;
+  overflow-y: auto; flex: 1;
+}
+.modalSubtitle { font-size: 0.875rem; color: #6b7280; margin: 0; }
+
+/* Filas de detalle dentro del modal */
+.detailRow {
+  display: flex; flex-direction: column; gap: 0.375rem;
+  padding: 0.875rem 1rem; background: #f9fafb;
+  border-radius: 0.625rem; border: 1px solid #f3f4f6;
+}
+
+.detailRowTop {
+  display: flex; align-items: center;
+  justify-content: space-between; gap: 0.75rem;
+}
+.detailName { font-size: 0.875rem; font-weight: 600; color: #111827; }
+
+/* Badges de urgencia */
+.detailBadgeOrange { background: #ffedd5; color: #c2410c; font-size: 0.75rem; font-weight: 500; padding: 0.2rem 0.6rem; border-radius: 9999px; white-space: nowrap; }
+.detailBadgeRed    { background: #fee2e2; color: #b91c1c; font-size: 0.75rem; font-weight: 500; padding: 0.2rem 0.6rem; border-radius: 9999px; white-space: nowrap; }
+.detailBadgeYellow { background: #fef9c3; color: #92400e; font-size: 0.75rem; font-weight: 500; padding: 0.2rem 0.6rem; border-radius: 9999px; white-space: nowrap; }
+
+/* Barra de progreso dentro del modal */
+.detailProgress     { height: 6px; background: #e5e7eb; border-radius: 9999px; overflow: hidden; }
+.detailProgressFill { height: 100%; background: #f97316; border-radius: 9999px; transition: width 0.4s; }
+.detailHint         { font-size: 0.75rem; color: #9ca3af; margin: 0; }
+
+/* Meta info (vencimiento) */
+.detailMeta     { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 0.125rem; }
+.detailMetaItem { font-size: 0.8125rem; color: #6b7280; }
+.detailMetaItem strong { color: #111827; }
+
+.modalFooter {
+  display: flex; justify-content: flex-end;
+  padding: 1rem 1.5rem; border-top: 1px solid #f3f4f6; flex-shrink: 0;
+}
+
+.btnOutline {
+  padding: 0.6rem 1.25rem; background: transparent; color: #374151;
+  border: 1px solid #d1d5db; border-radius: 0.5rem;
+  font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: background 0.15s;
+}
+.btnOutline:hover { background: #f9fafb; }
+
+/* ══════════════════════════════════════════════
+   Skeletons
 ══════════════════════════════════════════════ */
 @keyframes shimmer {
   0%   { background-position: -400px 0; }
   100% { background-position:  400px 0; }
 }
-
 .skeleton {
   border-radius: 0.375rem;
-  background: linear-gradient(
-    90deg,
-    #f0f0f0 25%,
-    #e0e0e0 50%,
-    #f0f0f0 75%
-  );
-  background-size: 800px 100%;
-  animation: shimmer 1.4s infinite linear;
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 800px 100%; animation: shimmer 1.4s infinite linear;
 }
-
-/* Tamaños de skeleton por contexto */
-.skeletonLabel  { height: 14px; width: 60%;  margin-bottom: 0.5rem; }
-.skeletonValue  { height: 28px; width: 80%;  margin-bottom: 0.25rem; }
-.skeletonTrend  { height: 12px; width: 40%; }
-.skeletonIcon   { width: 48px; height: 48px; border-radius: 0.5rem; flex-shrink: 0; }
-.skeletonChart  { height: 250px; width: 100%; margin-top: 0.5rem; }
-.skeletonBar    { height: 8px;  width: 100%; border-radius: 9999px; }
-.skeletonNotifIcon { width: 36px; height: 36px; border-radius: 0.5rem; flex-shrink: 0; }
+.skeletonLabel      { height: 14px; width: 60%; margin-bottom: 0.5rem; }
+.skeletonValue      { height: 28px; width: 80%; margin-bottom: 0.25rem; }
+.skeletonTrend      { height: 12px; width: 40%; }
+.skeletonIcon       { width: 48px; height: 48px; border-radius: 0.5rem; flex-shrink: 0; }
+.skeletonChart      { height: 250px; width: 100%; margin-top: 0.5rem; }
+.skeletonBar        { height: 8px; width: 100%; border-radius: 9999px; }
+.skeletonNotifIcon  { width: 36px; height: 36px; border-radius: 0.5rem; flex-shrink: 0; }
+.skeletonDetailName { height: 14px; width: 55%; }
+.skeletonDetailBar  { height: 6px;  width: 100%; border-radius: 9999px; margin-top: 0.375rem; }
+.skeletonDetailSub  { height: 12px; width: 70%; margin-top: 0.25rem; }
