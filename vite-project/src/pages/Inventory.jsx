@@ -13,7 +13,16 @@ import {
 } from "../services/inventoryService";
 import styles from "../styles/Inventory.module.css";
 
-const EMPTY_CATALOG  = { name: "", code: "", description: "" };
+const EMPTY_CATALOG  = {
+  name: "",
+  code: "",
+  image: "",
+  quantity: "",
+  purchaseDate: "",
+  expiryDate: "",
+  cost: "",
+  price: "",
+};
 const EMPTY_LOT      = { productId: "", quantity: "", cost: "", price: "", expiryDate: "" };
 const EMPTY_SUPPLIER = { name: "", phone: "" };
 
@@ -66,14 +75,20 @@ export default function Inventory() {
 
   // ── Catálogo ───────────────────────────────────────────────────────────────
   function handleOpenAdd() {
+    const today = new Date().toISOString().slice(0, 10);
     setEditTarget(null);
-    setCatalogForm(EMPTY_CATALOG);
+    setCatalogForm({ ...EMPTY_CATALOG, purchaseDate: today });
     setShowCatalog(true);
   }
 
   function handleOpenEdit(product) {
     setEditTarget(product);
-    setCatalogForm({ name: product.name, code: product.code, description: product.description });
+    setCatalogForm({
+      ...EMPTY_CATALOG,
+      name: product.name,
+      code: product.code,
+      image: product.image === "💊" ? "" : product.image,
+    });
     setShowCatalog(true);
   }
 
@@ -86,7 +101,25 @@ export default function Inventory() {
         setProducts((prev) => prev.map((p) => (p.id === editTarget.id ? { ...p, ...updated } : p)));
       } else {
         const created = await createProduct(catalogForm);
-        setProducts((prev) => [...prev, created]);
+        await registerLot({
+          code: created.code,
+          quantity: catalogForm.quantity,
+          purchaseDate: catalogForm.purchaseDate,
+          expiryDate: catalogForm.expiryDate,
+          cost: catalogForm.cost,
+          price: catalogForm.price,
+          lotActive: true,
+        });
+        setProducts((prev) => [
+          ...prev,
+          {
+            ...created,
+            quantity: Number(catalogForm.quantity),
+            cost: Number(catalogForm.cost),
+            price: Number(catalogForm.price),
+            expiryDate: catalogForm.expiryDate,
+          },
+        ]);
       }
       setShowCatalog(false);
     } finally {
@@ -104,7 +137,8 @@ export default function Inventory() {
     e.preventDefault();
     setSavingLot(true);
     try {
-      await registerLot(lotForm);
+      const selectedProduct = products.find((p) => p.id === Number(lotForm.productId));
+      await registerLot({ ...lotForm, code: selectedProduct?.code });
       setProducts((prev) =>
         prev.map((p) =>
           p.id === Number(lotForm.productId)
@@ -124,7 +158,7 @@ export default function Inventory() {
     setDeleting(true);
     try {
       await deleteProduct(deleteTarget.id);
-      setProducts((prev) => prev.filter((p) => p.id !== deleteTarget.id));
+      setProducts((prev) => prev.map((p) => (p.id === deleteTarget.id ? { ...p, active: false } : p)));
       setDeleteTarget(null);
     } finally {
       setDeleting(false);
@@ -224,6 +258,7 @@ export default function Inventory() {
                 <th>Imagen</th>
                 <th>Nombre</th>
                 <th>Código</th>
+                <th>Estado</th>
                 <th>Descripción</th>
                 <th>Costo</th>
                 <th>Precio</th>
@@ -248,12 +283,17 @@ export default function Inventory() {
                     </tr>
                   ))
                 : filtered.length === 0
-                ? <tr><td colSpan={9} className={styles.emptyRow}>No se encontraron productos</td></tr>
+                ? <tr><td colSpan={10} className={styles.emptyRow}>No se encontraron productos</td></tr>
                 : filtered.map((p) => (
                     <tr key={p.id}>
                       <td><div className={styles.productImage}>{p.image}</div></td>
                       <td className={styles.productName}>{p.name}</td>
                       <td className={styles.muted}>{p.code}</td>
+                      <td>
+                        <span className={`${styles.badge} ${p.active === false ? styles.badgeRed : styles.badgeGreen}`}>
+                          {p.active === false ? "Inactivo" : "Activo"}
+                        </span>
+                      </td>
                       <td className={styles.description}>{p.description}</td>
                       <td className={styles.muted}>L. {Number(p.cost).toFixed(2)}</td>
                       <td className={styles.price}>L. {Number(p.price).toFixed(2)}</td>
@@ -268,7 +308,7 @@ export default function Inventory() {
                           <button className={styles.btnEdit} onClick={() => handleOpenEdit(p)} title="Editar">
                             <Edit2 size={15} />
                           </button>
-                          <button className={styles.btnDelete} onClick={() => setDeleteTarget(p)} title="Eliminar">
+                          <button className={styles.btnDelete} onClick={() => setDeleteTarget(p)} title="Desactivar" disabled={p.active === false}>
                             <Trash2 size={15} />
                           </button>
                         </div>
@@ -299,9 +339,33 @@ export default function Inventory() {
                   <input type="text" value={catalogForm.code} onChange={(e) => setCatalogForm({ ...catalogForm, code: e.target.value })} placeholder="MED-001" required />
                 </div>
                 <div className={`${styles.formGroup} ${styles.colSpan2}`}>
-                  <label>Descripción</label>
-                  <textarea value={catalogForm.description} onChange={(e) => setCatalogForm({ ...catalogForm, description: e.target.value })} rows={3} placeholder="Descripción del producto..." required />
+                  <label>Imagen (URL, opcional)</label>
+                  <input type="url" value={catalogForm.image} onChange={(e) => setCatalogForm({ ...catalogForm, image: e.target.value })} placeholder="https://ejemplo.com/imagen.jpg" />
                 </div>
+                {!editTarget && (
+                  <>
+                    <div className={styles.formGroup}>
+                      <label>Cantidad Inicial</label>
+                      <input type="number" min="1" value={catalogForm.quantity} onChange={(e) => setCatalogForm({ ...catalogForm, quantity: e.target.value })} placeholder="0" required />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label>Fecha de Compra</label>
+                      <input type="date" value={catalogForm.purchaseDate} onChange={(e) => setCatalogForm({ ...catalogForm, purchaseDate: e.target.value })} required />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label>Fecha de Vencimiento</label>
+                      <input type="date" value={catalogForm.expiryDate} onChange={(e) => setCatalogForm({ ...catalogForm, expiryDate: e.target.value })} required />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label>Precio de Costo (L.)</label>
+                      <input type="number" step="0.01" min="0" value={catalogForm.cost} onChange={(e) => setCatalogForm({ ...catalogForm, cost: e.target.value })} placeholder="0.00" required />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label>Precio de Venta (L.)</label>
+                      <input type="number" step="0.01" min="0" value={catalogForm.price} onChange={(e) => setCatalogForm({ ...catalogForm, price: e.target.value })} placeholder="0.00" required />
+                    </div>
+                  </>
+                )}
               </div>
               <div className={styles.modalFooter}>
                 <button type="button" className={styles.btnOutline} onClick={() => setShowCatalog(false)}>Cancelar</button>
