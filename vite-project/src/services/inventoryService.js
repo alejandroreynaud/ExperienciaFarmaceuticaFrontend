@@ -58,10 +58,47 @@ function normalizeLot(lot) {
   };
 }
 
-export async function getProducts() {
+function buildInventoryQuery(filters = {}) {
+  const params = new URLSearchParams();
+  const append = (key, value) => {
+    if (value === undefined || value === null) return;
+    const text = String(value).trim();
+    if (!text) return;
+    params.set(key, text);
+  };
+
+  append("estado_producto", filters.productStatus);
+  append("estado_lote", filters.lotStatus);
+  append("id_prov", filters.supplierId);
+  append("vence_desde", filters.expiryFrom);
+  append("vence_hasta", filters.expiryTo);
+  append("stock_min", filters.stockMin);
+  append("stock_max", filters.stockMax);
+  append("precio_min", filters.priceMin);
+  append("precio_max", filters.priceMax);
+
+  const query = params.toString();
+  return query ? `/inventory/products?${query}` : "/inventory/products";
+}
+
+function hasLotLevelFilters(filters = {}) {
+  return [
+    filters.lotStatus,
+    filters.supplierId,
+    filters.expiryFrom,
+    filters.expiryTo,
+    filters.stockMin,
+    filters.stockMax,
+    filters.priceMin,
+    filters.priceMax,
+  ].some((value) => String(value ?? "").trim() !== "");
+}
+
+export async function getProducts(filters = {}) {
+  const inventoryPath = buildInventoryQuery(filters);
   const [productsData, inventoryData] = await Promise.all([
     apiRequest("/productos"),
-    apiRequest("/inventory/products").catch(() => ({ data: [] })),
+    apiRequest(inventoryPath).catch(() => ({ data: [] })),
   ]);
 
   const products = Array.isArray(productsData)
@@ -137,7 +174,7 @@ export async function getProducts() {
     inventoryByCode.set(code, current);
   }
 
-  return products.map((product) => {
+  let merged = products.map((product) => {
     const base = normalizeProduct(product);
     const inventory = inventoryByCode.get(base.code);
     if (!inventory) return base;
@@ -163,6 +200,20 @@ export async function getProducts() {
       active: inventory.hasLots ? inventory.active : base.active,
     };
   });
+
+  if (String(filters.productStatus || "").trim() === "activo") {
+    merged = merged.filter((p) => p.active === true);
+  }
+  if (String(filters.productStatus || "").trim() === "inactivo") {
+    merged = merged.filter((p) => p.active === false);
+  }
+
+  if (hasLotLevelFilters(filters)) {
+    const codesWithLots = new Set(Array.from(inventoryByCode.keys()));
+    merged = merged.filter((p) => codesWithLots.has(p.code));
+  }
+
+  return merged;
 }
 
 export async function createProduct(data) {
@@ -286,7 +337,38 @@ export async function deleteSupplier(id) {
   return { success: true, id };
 }
 
-export async function exportInventoryPDF() {
-  await apiRequest("/inventory/export/pdf");
+export async function exportInventoryPDF(filters = {}) {
+  const baseUrl = import.meta.env.VITE_API_URL || "/api";
+  const normalizedBase = baseUrl.replace(/\/$/, "");
+  const query = buildInventoryQuery(filters).replace("/inventory/products", "");
+  const url = `${normalizedBase}/inventory/export/pdf${query}`;
+
+  const response = await fetch(url, { method: "GET", cache: "no-store" });
+  if (!response.ok) {
+    let message = `Error exportando inventario (status ${response.status})`;
+    try {
+      const payload = await response.json();
+      message = payload?.message || payload?.error || message;
+    } catch {
+      const text = await response.text();
+      if (text) message = text;
+    }
+    throw new Error(message);
+  }
+
+  const blob = await response.blob();
+  const objectUrl = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+
+  const disposition = response.headers.get("content-disposition") || "";
+  const filenameMatch = disposition.match(/filename="?([^";]+)"?/i);
+  link.download = filenameMatch?.[1] || "inventario-completo.pdf";
+
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(objectUrl);
+
   return { success: true };
 }

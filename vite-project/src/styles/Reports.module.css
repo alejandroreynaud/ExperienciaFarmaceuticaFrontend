@@ -125,6 +125,12 @@
 .table tbody tr:hover { background: #f9fafb; }
 .table td { padding: 0.875rem 1.25rem; vertical-align: middle; }
 
+.emptyRow {
+  text-align: center;
+  color: #6b7280;
+  padding: 1rem 1.25rem;
+}
+
 .productName { font-weight: 500; color: #111827; }
 .muted       { color: #6b7280; }
 
