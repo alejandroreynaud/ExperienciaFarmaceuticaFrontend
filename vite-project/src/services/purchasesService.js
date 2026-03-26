@@ -1,123 +1,110 @@
-/**
- * purchasesService.js
- *
- * Módulo de Compras — registro de facturas completas.
- * Cada factura puede incluir múltiples productos.
- * TODO: conectar con backend según endpoints indicados.
- */
+const BASE_URL = "http://localhost:3008/api";
 
-// ─── Mocks ────────────────────────────────────────────────────────────────────
-
-const MOCK_SUPPLIERS = [
-  "Distribuidora Médica SA",
-  "Farmacéutica Nacional",
-  "Proveedora Salud",
-  "Laboratorios Unidos",
-];
-
-const MOCK_INVOICES = [
-  {
-    id: 1,
-    invoiceNumber: "FAC-2024-001",
-    supplier: "Distribuidora Médica SA",
-    rtn: "08019990123456",
-    invoiceDate: "2024-03-10",
-    products: [
-      { productId: "MED-001", productName: "Paracetamol 500mg", quantity: 500, expiryDate: "2025-12-31" },
-    ],
-    total: 1250,
-    imageUrl: null,
-  },
-  {
-    id: 2,
-    invoiceNumber: "FAC-2024-002",
-    supplier: "Farmacéutica Nacional",
-    rtn: "08019990654321",
-    invoiceDate: "2024-03-09",
-    products: [
-      { productId: "MED-002", productName: "Ibuprofeno 400mg", quantity: 300, expiryDate: "2025-11-30" },
-    ],
-    total: 900,
-    imageUrl: null,
-  },
-];
-
-// Productos disponibles para el selector dentro del formulario de factura.
-// TODO: reemplazar con getProducts() de inventoryService cuando estén conectados.
-const MOCK_AVAILABLE_PRODUCTS = [
-  { id: "MED-001", name: "Paracetamol 500mg",  code: "MED-001", description: "Analgésico y antipirético", cost: 2.5 },
-  { id: "MED-002", name: "Ibuprofeno 400mg",   code: "MED-002", description: "Antiinflamatorio",          cost: 3.0 },
-  { id: "MED-003", name: "Amoxicilina 500mg",  code: "MED-003", description: "Antibiótico",               cost: 8.0 },
-  { id: "MED-004", name: "Omeprazol 20mg",     code: "MED-004", description: "Inhibidor de bomba",        cost: 4.5 },
-  { id: "MED-005", name: "Losartán 50mg",      code: "MED-005", description: "Antihipertensivo",          cost: 5.0 },
-];
-
-const delay = (ms) => new Promise((r) => setTimeout(r, ms));
-
-// ─── Servicios ────────────────────────────────────────────────────────────────
-
-/**
- * Obtiene el historial de facturas de compra.
- * TODO: reemplazar con → GET /api/purchases/invoices
- */
-export async function getInvoices() {
-  await delay(600);
-  return MOCK_INVOICES;
+async function api(path, options = {}) {
+    const res  = await fetch(`${BASE_URL}${path}`, options);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message ?? "Error en la petición");
+    return data;
 }
 
-/**
- * Obtiene los proveedores disponibles.
- * TODO: reemplazar con → GET /api/purchases/suppliers
- */
+// POST /api/proveedores
+export async function createSupplier(nombre, telefono = "") {
+    const { data } = await api("/proveedores", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nombre, telefono }),
+    });
+    return { id: data.id, name: data.nombre };
+}
+
+// GET /api/proveedores
 export async function getSuppliers() {
-  await delay(300);
-  return MOCK_SUPPLIERS;
+    try {
+        const { data } = await api("/proveedores");
+        return data.map((p) => ({ id: p.id, name: p.nombre }));
+    } catch {
+        return [];
+    }
 }
 
-/**
- * Obtiene los productos disponibles para agregar a una factura.
- * TODO: reemplazar con → GET /api/inventory/products (solo catálogo)
- */
-export async function getAvailableProducts() {
-  await delay(300);
-  return MOCK_AVAILABLE_PRODUCTS;
+// GET /api/compras
+export async function getInvoices() {
+    try {
+        const { data } = await api("/compras");
+        return data.map((c) => ({
+            id:            c.id,
+            invoiceNumber: `FAC-${String(c.id).padStart(4, "0")}`,
+            supplier:      c.Proveedor?.nombre   ?? `Proveedor ${c.proveedor_id}`,
+            rtn:           c.Proveedor?.telefono  ?? "",
+            invoiceDate:   c.fecha,
+            total:         c.total,
+            imageUrl:      null,
+            products: (c.DetalleCompras ?? []).map((d) => ({
+                productId:   d.Inventario?.Producto?.codigo  ?? d.id_lote,
+                productName: d.Inventario?.Producto?.nombre  ?? "Producto",
+                quantity:    d.cantidad,
+                expiryDate:  d.Inventario?.fecha_vencimiento ?? "",
+            })),
+        }));
+    } catch {
+        return [];
+    }
 }
 
-/**
- * Registra una nueva factura de compra.
- * @param {object} invoiceData - { invoiceNumber, supplier, rtn, invoiceDate, products, total, imageFile }
- * TODO: reemplazar con → POST /api/purchases/invoices
- *       Enviar como multipart/form-data si incluye imagen
- */
-export async function createInvoice(invoiceData) {
-  await delay(700);
-  return {
-    id: Date.now(),
-    imageUrl: null,
-    ...invoiceData,
-  };
-}
-
-/**
- * Elimina una factura de compra.
- * @param {number} id - ID de la factura
- * TODO: reemplazar con → DELETE /api/purchases/invoices/:id
- */
-export async function deleteInvoice(id) {
-  await delay(400);
-  return { success: true, id };
-}
-
-/**
- * Resumen del mes: total facturado, cantidad de facturas, unidades adquiridas.
- * TODO: reemplazar con → GET /api/purchases/summary?month=YYYY-MM
- */
+// GET /api/compras/resumen
 export async function getPurchasesSummary() {
-  await delay(400);
-  return {
-    totalMonth:   5550.00,
-    totalMonthPct: "+8.5%",
-    invoiceCount: MOCK_INVOICES.length,
-    unitsBought:  1400,
-  };
+    try {
+        const { data } = await api("/compras/resumen");
+        return {
+            totalMonth:    data.suma_total    ?? 0,
+            totalMonthPct: "+0.0%",
+            invoiceCount:  data.total_compras ?? 0,
+            unitsBought:   0,
+        };
+    } catch {
+        return { totalMonth: 0, totalMonthPct: "+0.0%", invoiceCount: 0, unitsBought: 0 };
+    }
+}
+
+// GET /api/productos
+export async function getAvailableProducts() {
+    try {
+        const { data } = await api("/productos");
+        return data.map((p) => ({
+            id:   p.id,
+            name: p.nombre,
+            code: p.codigo,
+        }));
+    } catch {
+        return [];
+    }
+}
+
+// POST /api/compras
+export async function createInvoice(invoiceData) {
+    const { data } = await api("/compras", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            proveedor_id: invoiceData.supplier,
+            fecha:        invoiceData.invoiceDate,
+            total:        invoiceData.total,
+            metodo_pago:  "efectivo",
+            detalles: invoiceData.products.map((p) => ({
+                id_lote:  p.productId,
+                cantidad: p.quantity,
+                subtotal: 0
+            }))
+        }),
+    });
+    return {
+        id:            data.id,
+        invoiceNumber: `FAC-${String(data.id).padStart(4, "0")}`,
+        supplier:      invoiceData.supplier,
+        rtn:           "",
+        invoiceDate:   invoiceData.invoiceDate,
+        total:         invoiceData.total,
+        products:      invoiceData.products,
+        imageUrl:      null,
+    };
 }
