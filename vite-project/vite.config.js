@@ -7,6 +7,7 @@ export default defineConfig({
       jsxRuntime: "automatic",
     }),
   ],
+  
   server: {
     host: true,
     proxy: {
