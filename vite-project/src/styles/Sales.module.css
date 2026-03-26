@@ -295,7 +295,7 @@
 }
 .btnVerDetalle:hover { background: #dbeafe; }
 
-/* ── Modal detalle ──────────────────────────── */
+/* ── Modal detalle ────────────────────────── */
 .detailMeta {
   padding: 1rem 1.5rem;
   border-bottom: 1px solid #f3f4f6;
