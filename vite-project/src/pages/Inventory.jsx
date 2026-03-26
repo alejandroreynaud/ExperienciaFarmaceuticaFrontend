@@ -583,7 +583,7 @@ export default function Inventory() {
         <div className={styles.modalOverlay} onClick={() => setShowCatalog(false)}>
           <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
             <div className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>{editTarget ? "Editar Producto" : "Nuevo Producto (incluye primer lote)"}</h2>
+              <h2 className={styles.modalTitle}>{editTarget ? "Editar Producto" : "Nuevo Producto"}</h2>
               <button className={styles.modalClose} onClick={() => setShowCatalog(false)}><X size={20} /></button>
             </div>
             <form onSubmit={handleSaveCatalog} className={styles.modalForm}>
