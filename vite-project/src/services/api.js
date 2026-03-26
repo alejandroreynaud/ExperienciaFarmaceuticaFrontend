@@ -26,8 +26,10 @@ async function parseResponse(response) {
 }
 
 export async function apiRequest(path, options = {}) {
+  const method = options.method || "GET";
   const config = {
-    method: "GET",
+    method,
+    ...(String(method).toUpperCase() === "GET" ? { cache: "no-store" } : {}),
     headers: {
       "Content-Type": "application/json",
       ...(options.headers || {}),

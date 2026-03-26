@@ -2,9 +2,11 @@ import React, { useState, useEffect } from "react";
 import { Plus, Search, Edit2, Trash2, FileDown, Package, Truck, X } from "lucide-react";
 import {
   getProducts,
+  getProductLotsByCode,
   createProduct,
   updateProduct,
-  deleteProduct,
+  setProductActive,
+  updateInventoryLot,
   registerLot,
   getSuppliers,
   createSupplier,
@@ -17,13 +19,15 @@ const EMPTY_CATALOG  = {
   name: "",
   code: "",
   image: "",
+  description: "",
+  supplierId: "",
   quantity: "",
   purchaseDate: "",
   expiryDate: "",
   cost: "",
   price: "",
 };
-const EMPTY_LOT      = { productId: "", quantity: "", cost: "", price: "", expiryDate: "" };
+const EMPTY_LOT      = { productId: "", supplierId: "", quantity: "", cost: "", price: "", expiryDate: "" };
 const EMPTY_SUPPLIER = { name: "", phone: "" };
 
 function Skeleton({ className }) {
@@ -53,10 +57,25 @@ export default function Inventory() {
   const [supplierForm,   setSupplierForm]   = useState(EMPTY_SUPPLIER);
   const [savingSup,      setSavingSup]      = useState(false);
   const [deletingSupId,  setDeletingSupId]  = useState(null);
+  const [supplierPickerContext, setSupplierPickerContext] = useState(null);
 
-  // Modal eliminar producto
-  const [deleteTarget, setDeleteTarget] = useState(null);
-  const [deleting,     setDeleting]     = useState(false);
+  // Modal lotes
+  const [showLots,       setShowLots]       = useState(false);
+  const [lotsLoading,    setLotsLoading]    = useState(false);
+  const [lotsMessage,    setLotsMessage]    = useState("");
+  const [lotsProduct,    setLotsProduct]    = useState(null);
+  const [productLots,    setProductLots]    = useState([]);
+  const [editingLot,     setEditingLot]     = useState(null);
+  const [savingEditLot,  setSavingEditLot]  = useState(false);
+  const [togglingLotId,  setTogglingLotId]  = useState(null);
+  const [togglingProductId, setTogglingProductId] = useState(null);
+  const [editLotForm,    setEditLotForm]    = useState({
+    quantity: "",
+    purchaseDate: "",
+    expiryDate: "",
+    cost: "",
+    price: "",
+  });
 
   // ── Carga inicial ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -77,7 +96,11 @@ export default function Inventory() {
   function handleOpenAdd() {
     const today = new Date().toISOString().slice(0, 10);
     setEditTarget(null);
-    setCatalogForm({ ...EMPTY_CATALOG, purchaseDate: today });
+    setCatalogForm({
+      ...EMPTY_CATALOG,
+      purchaseDate: today,
+      supplierId: suppliers[0]?.id ? String(suppliers[0].id) : "",
+    });
     setShowCatalog(true);
   }
 
@@ -88,6 +111,12 @@ export default function Inventory() {
       name: product.name,
       code: product.code,
       image: product.image === "💊" ? "" : product.image,
+      description: product.description || "",
+      quantity: String(product.quantity ?? ""),
+      purchaseDate: product.purchaseDate || new Date().toISOString().slice(0, 10),
+      expiryDate: product.expiryDate || "",
+      cost: String(product.cost ?? ""),
+      price: String(product.price ?? ""),
     });
     setShowCatalog(true);
   }
@@ -95,14 +124,74 @@ export default function Inventory() {
   async function handleSaveCatalog(e) {
     e.preventDefault();
     setSavingCat(true);
+    let createdProduct = null;
     try {
       if (editTarget) {
         const updated = await updateProduct(editTarget.id, catalogForm);
-        setProducts((prev) => prev.map((p) => (p.id === editTarget.id ? { ...p, ...updated } : p)));
+
+        if (editTarget.lotId) {
+          await updateInventoryLot(editTarget.lotId, {
+            quantity: catalogForm.quantity,
+            expiryDate: catalogForm.expiryDate,
+            cost: catalogForm.cost,
+            price: catalogForm.price,
+          });
+        }
+
+        setProducts((prev) =>
+          prev.map((p) =>
+            p.id === editTarget.id
+              ? {
+                  ...p,
+                  ...updated,
+                  description: catalogForm.description,
+                  quantity: Number(catalogForm.quantity),
+                  purchaseDate: catalogForm.purchaseDate,
+                  expiryDate: catalogForm.expiryDate,
+                  cost: Number(catalogForm.cost),
+                  price: Number(catalogForm.price),
+                }
+              : p
+          )
+        );
       } else {
-        const created = await createProduct(catalogForm);
+        const purchaseDate = new Date(catalogForm.purchaseDate);
+        const expiryDate = new Date(catalogForm.expiryDate);
+        const cost = Number(catalogForm.cost);
+        const price = Number(catalogForm.price);
+
+        if (
+          Number.isNaN(purchaseDate.getTime()) ||
+          Number.isNaN(expiryDate.getTime())
+        ) {
+          alert("Las fechas de compra y vencimiento deben ser válidas.");
+          return;
+        }
+
+        if (expiryDate.getTime() <= purchaseDate.getTime()) {
+          alert("La fecha de vencimiento debe ser posterior a la fecha de compra.");
+          return;
+        }
+
+        if (!Number.isFinite(cost) || cost < 0) {
+          alert("El precio de costo debe ser un número no negativo.");
+          return;
+        }
+
+        if (!Number.isFinite(price) || price <= 0) {
+          alert("El precio de venta debe ser un número positivo.");
+          return;
+        }
+
+        if (price < cost) {
+          alert("El precio de venta no puede ser menor al precio de costo.");
+          return;
+        }
+
+        createdProduct = await createProduct(catalogForm);
         await registerLot({
-          code: created.code,
+          code: createdProduct.code,
+          supplierId: catalogForm.supplierId,
           quantity: catalogForm.quantity,
           purchaseDate: catalogForm.purchaseDate,
           expiryDate: catalogForm.expiryDate,
@@ -110,18 +199,20 @@ export default function Inventory() {
           price: catalogForm.price,
           lotActive: true,
         });
-        setProducts((prev) => [
-          ...prev,
-          {
-            ...created,
-            quantity: Number(catalogForm.quantity),
-            cost: Number(catalogForm.cost),
-            price: Number(catalogForm.price),
-            expiryDate: catalogForm.expiryDate,
-          },
-        ]);
+
+        // Keep product and first-lot data consistent in summary.
+        const refreshedProducts = await getProducts();
+        setProducts(refreshedProducts);
       }
       setShowCatalog(false);
+    } catch (error) {
+      if (createdProduct) {
+        alert(
+          "El producto se creo, pero no se pudo registrar su primer lote. Intenta de nuevo desde 'Registrar Lote'."
+        );
+      } else {
+        alert(error?.message || "No se pudo guardar el producto.");
+      }
     } finally {
       setSavingCat(false);
     }
@@ -129,7 +220,11 @@ export default function Inventory() {
 
   // ── Lote ───────────────────────────────────────────────────────────────────
   function handleOpenLot() {
-    setLotForm({ ...EMPTY_LOT, productId: products[0]?.id ?? "" });
+    setLotForm({
+      ...EMPTY_LOT,
+      productId: products[0]?.id ?? "",
+      supplierId: suppliers[0]?.id ? String(suppliers[0].id) : "",
+    });
     setShowLot(true);
   }
 
@@ -139,29 +234,160 @@ export default function Inventory() {
     try {
       const selectedProduct = products.find((p) => p.id === Number(lotForm.productId));
       await registerLot({ ...lotForm, code: selectedProduct?.code });
-      setProducts((prev) =>
-        prev.map((p) =>
-          p.id === Number(lotForm.productId)
-            ? { ...p, quantity: p.quantity + Number(lotForm.quantity), cost: Number(lotForm.cost), price: Number(lotForm.price), expiryDate: lotForm.expiryDate }
-            : p
-        )
-      );
+      const refreshedProducts = await getProducts();
+      setProducts(refreshedProducts);
       setShowLot(false);
     } finally {
       setSavingLot(false);
     }
   }
 
-  // ── Eliminar producto ──────────────────────────────────────────────────────
-  async function handleConfirmDelete() {
-    if (!deleteTarget) return;
-    setDeleting(true);
+  async function handleOpenLots(product) {
+    setProductLots([]);
+    setLotsMessage("");
+    setLotsProduct(product);
+    setShowLots(true);
+    setLotsLoading(true);
     try {
-      await deleteProduct(deleteTarget.id);
-      setProducts((prev) => prev.map((p) => (p.id === deleteTarget.id ? { ...p, active: false } : p)));
-      setDeleteTarget(null);
+      const lots = await getProductLotsByCode(product.code);
+      setProductLots(lots);
+      if (!lots.length) {
+        setLotsMessage("Lotes no asociados a ese producto.");
+      }
+    } catch (error) {
+      setProductLots([]);
+      setLotsMessage(error?.message || "No se pudieron cargar los lotes de este producto.");
     } finally {
-      setDeleting(false);
+      setLotsLoading(false);
+    }
+  }
+
+  function handleCloseLots() {
+    setShowLots(false);
+    setLotsLoading(false);
+    setLotsProduct(null);
+    setProductLots([]);
+    setLotsMessage("");
+  }
+
+  async function handleToggleProduct(product) {
+    if (product.hasLots || togglingProductId === product.id) return;
+
+    setTogglingProductId(product.id);
+    try {
+      await setProductActive(product.id, !product.active);
+      const refreshedProducts = await getProducts();
+      setProducts(refreshedProducts);
+    } catch (error) {
+      alert(error?.message || "No se pudo cambiar el estado del producto.");
+    } finally {
+      setTogglingProductId(null);
+    }
+  }
+
+  function formatDate(value) {
+    if (!value) return "—";
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("es-HN");
+  }
+
+  function toInputDate(value) {
+    if (!value) return "";
+    return String(value).slice(0, 10);
+  }
+
+  function handleOpenEditLot(lot) {
+    setEditingLot(lot);
+    setEditLotForm({
+      quantity: String(lot.quantity ?? ""),
+      purchaseDate: toInputDate(lot.purchaseDate),
+      expiryDate: toInputDate(lot.expiryDate),
+      cost: String(lot.cost ?? ""),
+      price: String(lot.price ?? ""),
+    });
+  }
+
+  function handleCloseEditLot() {
+    setEditingLot(null);
+    setEditLotForm({
+      quantity: "",
+      purchaseDate: "",
+      expiryDate: "",
+      cost: "",
+      price: "",
+    });
+  }
+
+  async function handleSaveEditLot(e) {
+    e.preventDefault();
+    if (!editingLot || !lotsProduct?.code) return;
+
+    setSavingEditLot(true);
+    try {
+      await updateInventoryLot(editingLot.id, {
+        quantity: editLotForm.quantity,
+        expiryDate: editLotForm.expiryDate,
+        cost: editLotForm.cost,
+        price: editLotForm.price,
+      });
+
+      const editedQuantity = Number(editLotForm.quantity);
+      setProductLots((prev) =>
+        prev.map((lot) =>
+          lot.id === editingLot.id
+            ? {
+                ...lot,
+                quantity: editedQuantity,
+                expiryDate: editLotForm.expiryDate,
+                cost: Number(editLotForm.cost),
+                price: Number(editLotForm.price),
+                active: editedQuantity > 0 ? lot.active : false,
+              }
+            : lot
+        )
+      );
+
+      const [lots, refreshedProducts] = await Promise.all([
+        getProductLotsByCode(lotsProduct.code),
+        getProducts(),
+      ]);
+
+      setProductLots(lots);
+      setProducts(refreshedProducts);
+      handleCloseEditLot();
+    } catch (error) {
+      alert(error?.message || "No se pudo actualizar el lote.");
+    } finally {
+      setSavingEditLot(false);
+    }
+  }
+
+  async function handleToggleLotStatus(lot) {
+    if (togglingLotId === lot.id || !lotsProduct?.code) return;
+
+    setTogglingLotId(lot.id);
+    try {
+      await updateInventoryLot(lot.id, { lotActive: !lot.active });
+
+      setProductLots((prev) =>
+        prev.map((item) =>
+          item.id === lot.id
+            ? { ...item, active: !lot.active }
+            : item
+        )
+      );
+
+      const [lots, refreshedProducts] = await Promise.all([
+        getProductLotsByCode(lotsProduct.code),
+        getProducts(),
+      ]);
+
+      setProductLots(lots);
+      setProducts(refreshedProducts);
+    } catch (error) {
+      alert(error?.message || "No se pudo cambiar el estado del lote.");
+    } finally {
+      setTogglingLotId(null);
     }
   }
 
@@ -172,10 +398,23 @@ export default function Inventory() {
     try {
       const created = await createSupplier(supplierForm);
       setSuppliers((prev) => [...prev, created]);
+
+      if (supplierPickerContext === "catalog") {
+        setCatalogForm((prev) => ({ ...prev, supplierId: String(created.id) }));
+      }
+      if (supplierPickerContext === "lot") {
+        setLotForm((prev) => ({ ...prev, supplierId: String(created.id) }));
+      }
+
       setSupplierForm(EMPTY_SUPPLIER);
     } finally {
       setSavingSup(false);
     }
+  }
+
+  function handleOpenSuppliersFrom(context) {
+    setSupplierPickerContext(context);
+    setShowSuppliers(true);
   }
 
   async function handleDeleteSupplier(id) {
@@ -290,9 +529,28 @@ export default function Inventory() {
                       <td className={styles.productName}>{p.name}</td>
                       <td className={styles.muted}>{p.code}</td>
                       <td>
-                        <span className={`${styles.badge} ${p.active === false ? styles.badgeRed : styles.badgeGreen}`}>
-                          {p.active === false ? "Inactivo" : "Activo"}
-                        </span>
+                        {p.hasLots ? (
+                          <div className={styles.statusCell}>
+                            <span
+                              className={`${styles.badge} ${p.active === false ? styles.badgeRed : styles.badgeGreen}`}
+                              title="Estado informativo (FEFO). Cambios solo desde Ver lotes"
+                            >
+                              {p.active === false ? "Inactivo" : "Activo"}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className={styles.statusCell}>
+                            <button
+                              type="button"
+                              className={`${styles.badge} ${p.active === false ? styles.badgeRed : styles.badgeGreen} ${styles.statusToggle}`}
+                              onClick={() => handleToggleProduct(p)}
+                              disabled={togglingProductId === p.id}
+                              title="Producto sin lotes asociados. Click para cambiar estado"
+                            >
+                              {p.active === false ? "Inactivo" : "Activo"}
+                            </button>
+                          </div>
+                        )}
                       </td>
                       <td className={styles.description}>{p.description}</td>
                       <td className={styles.muted}>L. {Number(p.cost).toFixed(2)}</td>
@@ -305,11 +563,11 @@ export default function Inventory() {
                       <td className={styles.muted}>{p.expiryDate || "—"}</td>
                       <td>
                         <div className={styles.actions}>
+                          <button className={styles.btnLot} onClick={() => handleOpenLots(p)} title="Ver lotes">
+                            Ver lotes
+                          </button>
                           <button className={styles.btnEdit} onClick={() => handleOpenEdit(p)} title="Editar">
                             <Edit2 size={15} />
-                          </button>
-                          <button className={styles.btnDelete} onClick={() => setDeleteTarget(p)} title="Desactivar" disabled={p.active === false}>
-                            <Trash2 size={15} />
                           </button>
                         </div>
                       </td>
@@ -325,7 +583,7 @@ export default function Inventory() {
         <div className={styles.modalOverlay} onClick={() => setShowCatalog(false)}>
           <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
             <div className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>{editTarget ? "Editar Producto" : "Nuevo Producto"}</h2>
+              <h2 className={styles.modalTitle}>{editTarget ? "Editar Producto" : "Nuevo Producto (incluye primer lote)"}</h2>
               <button className={styles.modalClose} onClick={() => setShowCatalog(false)}><X size={20} /></button>
             </div>
             <form onSubmit={handleSaveCatalog} className={styles.modalForm}>
@@ -342,30 +600,60 @@ export default function Inventory() {
                   <label>Imagen (URL, opcional)</label>
                   <input type="url" value={catalogForm.image} onChange={(e) => setCatalogForm({ ...catalogForm, image: e.target.value })} placeholder="https://ejemplo.com/imagen.jpg" />
                 </div>
+                <div className={`${styles.formGroup} ${styles.colSpan2}`}>
+                  <label>Descripción</label>
+                  <input type="text" value={catalogForm.description} onChange={(e) => setCatalogForm({ ...catalogForm, description: e.target.value })} placeholder="Descripción del producto" />
+                </div>
                 {!editTarget && (
-                  <>
-                    <div className={styles.formGroup}>
-                      <label>Cantidad Inicial</label>
-                      <input type="number" min="1" value={catalogForm.quantity} onChange={(e) => setCatalogForm({ ...catalogForm, quantity: e.target.value })} placeholder="0" required />
+                  <div className={`${styles.formGroup} ${styles.colSpan2}`}>
+                    <label>Proveedor</label>
+                    <div className={styles.inlineFieldActions}>
+                      <select
+                        value={catalogForm.supplierId}
+                        onChange={(e) => setCatalogForm({ ...catalogForm, supplierId: e.target.value })}
+                        required
+                      >
+                        <option value="">Selecciona un proveedor...</option>
+                        {suppliers.map((s) => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        className={styles.btnOutline}
+                        onClick={() => handleOpenSuppliersFrom("catalog")}
+                      >
+                        Agregar proveedor
+                      </button>
                     </div>
-                    <div className={styles.formGroup}>
-                      <label>Fecha de Compra</label>
-                      <input type="date" value={catalogForm.purchaseDate} onChange={(e) => setCatalogForm({ ...catalogForm, purchaseDate: e.target.value })} required />
-                    </div>
-                    <div className={styles.formGroup}>
-                      <label>Fecha de Vencimiento</label>
-                      <input type="date" value={catalogForm.expiryDate} onChange={(e) => setCatalogForm({ ...catalogForm, expiryDate: e.target.value })} required />
-                    </div>
-                    <div className={styles.formGroup}>
-                      <label>Precio de Costo (L.)</label>
-                      <input type="number" step="0.01" min="0" value={catalogForm.cost} onChange={(e) => setCatalogForm({ ...catalogForm, cost: e.target.value })} placeholder="0.00" required />
-                    </div>
-                    <div className={styles.formGroup}>
-                      <label>Precio de Venta (L.)</label>
-                      <input type="number" step="0.01" min="0" value={catalogForm.price} onChange={(e) => setCatalogForm({ ...catalogForm, price: e.target.value })} placeholder="0.00" required />
-                    </div>
-                  </>
+                  </div>
                 )}
+                <div className={styles.formGroup}>
+                  <label>{editTarget ? "Cantidad" : "Cantidad Inicial"}</label>
+                  <input type="number" min="0" value={catalogForm.quantity} onChange={(e) => setCatalogForm({ ...catalogForm, quantity: e.target.value })} placeholder="0" required />
+                </div>
+                <div className={styles.formGroup}>
+                  <label>Fecha de Compra</label>
+                  <input
+                    type="date"
+                    value={catalogForm.purchaseDate}
+                    onChange={(e) => setCatalogForm({ ...catalogForm, purchaseDate: e.target.value })}
+                    required={!editTarget}
+                    disabled={Boolean(editTarget)}
+                  />
+                </div>
+                <div className={styles.formGroup}>
+                  <label>Fecha de Vencimiento</label>
+                  <input type="date" value={catalogForm.expiryDate} onChange={(e) => setCatalogForm({ ...catalogForm, expiryDate: e.target.value })} required />
+                </div>
+                <div className={styles.formGroup}>
+                  <label>Precio de Costo (L.)</label>
+                  <input type="number" step="0.01" min="0" value={catalogForm.cost} onChange={(e) => setCatalogForm({ ...catalogForm, cost: e.target.value })} placeholder="0.00" required />
+                </div>
+                <div className={styles.formGroup}>
+                  <label>Precio de Venta (L.)</label>
+                  <input type="number" step="0.01" min="0" value={catalogForm.price} onChange={(e) => setCatalogForm({ ...catalogForm, price: e.target.value })} placeholder="0.00" required />
+                </div>
               </div>
               <div className={styles.modalFooter}>
                 <button type="button" className={styles.btnOutline} onClick={() => setShowCatalog(false)}>Cancelar</button>
@@ -397,6 +685,24 @@ export default function Inventory() {
                     ))}
                   </select>
                 </div>
+                <div className={`${styles.formGroup} ${styles.colSpan2}`}>
+                  <label>Proveedor</label>
+                  <div className={styles.inlineFieldActions}>
+                    <select value={lotForm.supplierId} onChange={(e) => setLotForm({ ...lotForm, supplierId: e.target.value })} required>
+                      <option value="">Selecciona un proveedor...</option>
+                      {suppliers.map((s) => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className={styles.btnOutline}
+                      onClick={() => handleOpenSuppliersFrom("lot")}
+                    >
+                      Agregar proveedor
+                    </button>
+                  </div>
+                </div>
                 <div className={styles.formGroup}>
                   <label>Cantidad</label>
                   <input type="number" min="1" value={lotForm.quantity} onChange={(e) => setLotForm({ ...lotForm, quantity: e.target.value })} placeholder="0" required />
@@ -427,11 +733,11 @@ export default function Inventory() {
 
       {/* ── Modal Proveedores ── */}
       {showSuppliers && (
-        <div className={styles.modalOverlay} onClick={() => setShowSuppliers(false)}>
+        <div className={styles.modalOverlay} onClick={() => { setShowSuppliers(false); setSupplierPickerContext(null); }}>
           <div className={styles.modalWide} onClick={(e) => e.stopPropagation()}>
             <div className={styles.modalHeader}>
               <h2 className={styles.modalTitle}>Proveedores</h2>
-              <button className={styles.modalClose} onClick={() => setShowSuppliers(false)}><X size={20} /></button>
+              <button className={styles.modalClose} onClick={() => { setShowSuppliers(false); setSupplierPickerContext(null); }}><X size={20} /></button>
             </div>
             <div className={styles.suppliersBody}>
 
@@ -507,21 +813,146 @@ export default function Inventory() {
         </div>
       )}
 
-      {/* ── Modal Confirmar Eliminación de Producto ── */}
-      {deleteTarget && (
-        <div className={styles.modalOverlay} onClick={() => setDeleteTarget(null)}>
-          <div className={styles.modalConfirm} onClick={(e) => e.stopPropagation()}>
-            <div className={styles.confirmIcon}><Trash2 size={28} color="#dc2626" /></div>
-            <h3 className={styles.confirmTitle}>Retirar producto?</h3>
-            <p className={styles.confirmMsg}>
-              Estás a punto de retirar <strong>{deleteTarget.name}</strong>. Esta acción no se puede deshacer.
-            </p>
-            <div className={styles.confirmActions}>
-              <button className={styles.btnOutline} onClick={() => setDeleteTarget(null)}>Cancelar</button>
-              <button className={styles.btnDanger} onClick={handleConfirmDelete} disabled={deleting}>
-                {deleting ? "Retirando..." : "Sí, retirar"}
-              </button>
+      {/* ── Modal Lotes por Producto ── */}
+      {showLots && (
+        <div className={styles.modalOverlay} onClick={handleCloseLots}>
+          <div className={styles.modalWide} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h2 className={styles.modalTitle}>
+                Lotes de {lotsProduct?.name} ({lotsProduct?.code})
+              </h2>
+              <button className={styles.modalClose} onClick={handleCloseLots}><X size={20} /></button>
             </div>
+            <div className={styles.suppliersBody}>
+              <div className={styles.tableCard}>
+                <div className={styles.tableWrap}>
+                  <table className={styles.table}>
+                    <thead>
+                      <tr>
+                        <th>ID Lote</th>
+                        <th>Estado</th>
+                        <th>Cantidad</th>
+                        <th>Cantidad Inicial</th>
+                        <th>Compra</th>
+                        <th>Vencimiento</th>
+                        <th>Costo</th>
+                        <th>Precio</th>
+                        <th>Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lotsLoading ? (
+                        <tr><td colSpan={9} className={styles.emptyRow}>Cargando lotes...</td></tr>
+                      ) : productLots.length === 0 ? (
+                        <tr><td colSpan={9} className={styles.emptyRow}>{lotsMessage || "Lotes no asociados a ese producto."}</td></tr>
+                      ) : (
+                        productLots.map((lot) => (
+                          <tr key={lot.id}>
+                            <td className={styles.muted}>#{lot.id}</td>
+                            <td>
+                              <button
+                                type="button"
+                                className={`${styles.badge} ${lot.active ? styles.badgeGreen : styles.badgeRed} ${styles.statusToggle}`}
+                                onClick={() => handleToggleLotStatus(lot)}
+                                disabled={togglingLotId === lot.id}
+                                title="Click para cambiar estado del lote"
+                              >
+                                {lot.active ? "Activo" : "Inactivo"}
+                              </button>
+                            </td>
+                            <td>{lot.quantity}</td>
+                            <td>{lot.initialQuantity}</td>
+                            <td className={styles.muted}>{formatDate(lot.purchaseDate)}</td>
+                            <td className={styles.muted}>{formatDate(lot.expiryDate)}</td>
+                            <td className={styles.muted}>L. {Number(lot.cost).toFixed(2)}</td>
+                            <td className={styles.price}>L. {Number(lot.price).toFixed(2)}</td>
+                            <td>
+                              <button
+                                className={styles.btnEdit}
+                                onClick={() => handleOpenEditLot(lot)}
+                                title={`Editar lote #${lot.id}`}
+                              >
+                                <Edit2 size={15} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div className={styles.modalFooter}>
+                <button type="button" className={styles.btnOutline} onClick={handleCloseLots}>Cerrar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal Editar Lote ── */}
+      {editingLot && (
+        <div className={styles.modalOverlay} onClick={handleCloseEditLot}>
+          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h2 className={styles.modalTitle}>Editar lote #{editingLot.id}</h2>
+              <button className={styles.modalClose} onClick={handleCloseEditLot}><X size={20} /></button>
+            </div>
+            <form onSubmit={handleSaveEditLot} className={styles.modalForm}>
+              <div className={styles.formGrid}>
+                <div className={styles.formGroup}>
+                  <label>Cantidad</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={editLotForm.quantity}
+                    onChange={(e) => setEditLotForm({ ...editLotForm, quantity: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className={styles.formGroup}>
+                  <label>Fecha de Compra</label>
+                  <input type="date" value={editLotForm.purchaseDate} disabled />
+                </div>
+                <div className={styles.formGroup}>
+                  <label>Fecha de Vencimiento</label>
+                  <input
+                    type="date"
+                    value={editLotForm.expiryDate}
+                    onChange={(e) => setEditLotForm({ ...editLotForm, expiryDate: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className={styles.formGroup}>
+                  <label>Precio de Costo (L.)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={editLotForm.cost}
+                    onChange={(e) => setEditLotForm({ ...editLotForm, cost: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className={styles.formGroup}>
+                  <label>Precio de Venta (L.)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={editLotForm.price}
+                    onChange={(e) => setEditLotForm({ ...editLotForm, price: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+              <div className={styles.modalFooter}>
+                <button type="button" className={styles.btnOutline} onClick={handleCloseEditLot}>Cancelar</button>
+                <button type="submit" className={styles.btnPrimary} disabled={savingEditLot}>
+                  {savingEditLot ? "Guardando..." : "Guardar lote"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
