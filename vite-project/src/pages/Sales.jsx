@@ -50,7 +50,7 @@ export default function Sales() {
       .finally(() => setLoading(false));
   }, []);
 
-  // ── Historial por fecha ────────────────────────────────────────────────────
+  // ── Historial por fecha ─────────────────────────────────────────────────
   async function fetchHistory(fecha) {
     setHistoryLoad(true);
     try {

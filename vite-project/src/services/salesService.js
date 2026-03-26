@@ -31,7 +31,7 @@ export async function getPaymentMethods() {
  */
 export async function createSale({ client, paymentMethod, items }) {
   const body = {
-    id_vendedor: 1, // TODO: reemplazar con usuario autenticado
+    id_vendedor: 1, // usuario autenticado
     id_cliente:  client ? Number(client) : null,
     metodo_pago: paymentMethod.toLowerCase(),
     productos:   items.map((i) => ({
