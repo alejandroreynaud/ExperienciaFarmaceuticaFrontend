@@ -217,6 +217,17 @@
   font-size: 1.25rem;
 }
 
+.imageLink {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #1d4ed8;
+  text-decoration: none;
+}
+
+.imageLink:hover {
+  text-decoration: underline;
+}
+
 .productName { font-weight: 500; color: #111827; white-space: nowrap; }
 .muted       { color: #6b7280; }
 .price       { font-weight: 600; color: #111827; }

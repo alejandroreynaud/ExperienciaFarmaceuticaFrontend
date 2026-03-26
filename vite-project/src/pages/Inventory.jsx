@@ -444,6 +444,10 @@ export default function Inventory() {
     return styles.badgeGreen;
   }
 
+  function isHttpUrl(value) {
+    return typeof value === "string" && /^https?:\/\//i.test(value.trim());
+  }
+
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className={styles.page}>
@@ -525,7 +529,23 @@ export default function Inventory() {
                 ? <tr><td colSpan={10} className={styles.emptyRow}>No se encontraron productos</td></tr>
                 : filtered.map((p) => (
                     <tr key={p.id}>
-                      <td><div className={styles.productImage}>{p.image}</div></td>
+                      <td>
+                        <div className={styles.productImage}>
+                          {isHttpUrl(p.image) ? (
+                            <a
+                              className={styles.imageLink}
+                              href={p.image}
+                              target="_blank"
+                              rel="noreferrer"
+                              title="Abrir imagen"
+                            >
+                              Abrir
+                            </a>
+                          ) : (
+                            p.image
+                          )}
+                        </div>
+                      </td>
                       <td className={styles.productName}>{p.name}</td>
                       <td className={styles.muted}>{p.code}</td>
                       <td>
