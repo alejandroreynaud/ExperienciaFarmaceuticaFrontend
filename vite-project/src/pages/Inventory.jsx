@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Plus, Search, Edit2, Trash2, FileDown, Package, Truck, X } from "lucide-react";
+import { Plus, Search, Edit2, Trash2, FileDown, Package, Truck, X, SlidersHorizontal } from "lucide-react";
 import {
   getProducts,
   getProductLotsByCode,
@@ -29,6 +29,17 @@ const EMPTY_CATALOG  = {
 };
 const EMPTY_LOT      = { productId: "", supplierId: "", quantity: "", cost: "", price: "", expiryDate: "" };
 const EMPTY_SUPPLIER = { name: "", phone: "" };
+const EMPTY_FILTERS = {
+  productStatus: "",
+  lotStatus: "",
+  supplierId: "",
+  expiryFrom: "",
+  expiryTo: "",
+  stockMin: "",
+  stockMax: "",
+  priceMin: "",
+  priceMax: "",
+};
 
 function Skeleton({ className }) {
   return <div className={`${styles.skeleton} ${className ?? ""}`} />;
@@ -40,6 +51,9 @@ export default function Inventory() {
   const [loading,    setLoading]    = useState(true);
   const [exporting,  setExporting]  = useState(false);
   const [search,     setSearch]     = useState("");
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [draftFilters, setDraftFilters] = useState(EMPTY_FILTERS);
 
   // Modal catálogo
   const [showCatalog, setShowCatalog] = useState(false);
@@ -78,10 +92,14 @@ export default function Inventory() {
   });
 
   // ── Carga inicial ──────────────────────────────────────────────────────────
+  async function loadProducts(activeFilters = filters) {
+    const prods = await getProducts(activeFilters);
+    setProducts(prods);
+  }
+
   useEffect(() => {
-    Promise.all([getProducts(), getSuppliers()])
+    Promise.all([loadProducts(EMPTY_FILTERS), getSuppliers()])
       .then(([prods, sups]) => {
-        setProducts(prods);
         setSuppliers(sups);
       })
       .finally(() => setLoading(false));
@@ -201,7 +219,7 @@ export default function Inventory() {
         });
 
         // Keep product and first-lot data consistent in summary.
-        const refreshedProducts = await getProducts();
+        const refreshedProducts = await getProducts(filters);
         setProducts(refreshedProducts);
       }
       setShowCatalog(false);
@@ -234,7 +252,7 @@ export default function Inventory() {
     try {
       const selectedProduct = products.find((p) => p.id === Number(lotForm.productId));
       await registerLot({ ...lotForm, code: selectedProduct?.code });
-      const refreshedProducts = await getProducts();
+      const refreshedProducts = await getProducts(filters);
       setProducts(refreshedProducts);
       setShowLot(false);
     } finally {
@@ -276,7 +294,7 @@ export default function Inventory() {
     setTogglingProductId(product.id);
     try {
       await setProductActive(product.id, !product.active);
-      const refreshedProducts = await getProducts();
+      const refreshedProducts = await getProducts(filters);
       setProducts(refreshedProducts);
     } catch (error) {
       alert(error?.message || "No se pudo cambiar el estado del producto.");
@@ -349,7 +367,7 @@ export default function Inventory() {
 
       const [lots, refreshedProducts] = await Promise.all([
         getProductLotsByCode(lotsProduct.code),
-        getProducts(),
+        getProducts(filters),
       ]);
 
       setProductLots(lots);
@@ -379,7 +397,7 @@ export default function Inventory() {
 
       const [lots, refreshedProducts] = await Promise.all([
         getProductLotsByCode(lotsProduct.code),
-        getProducts(),
+        getProducts(filters),
       ]);
 
       setProductLots(lots);
@@ -431,10 +449,33 @@ export default function Inventory() {
   async function handleExport() {
     setExporting(true);
     try {
-      await exportInventoryPDF();
+      await exportInventoryPDF(filters);
       alert("PDF exportado correctamente");
     } finally {
       setExporting(false);
+    }
+  }
+
+  async function handleApplyFilters() {
+    setLoading(true);
+    try {
+      setFilters(draftFilters);
+      const filteredProducts = await getProducts(draftFilters);
+      setProducts(filteredProducts);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleClearFilters() {
+    setLoading(true);
+    try {
+      setFilters(EMPTY_FILTERS);
+      setDraftFilters(EMPTY_FILTERS);
+      const allProducts = await getProducts(EMPTY_FILTERS);
+      setProducts(allProducts);
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -480,16 +521,134 @@ export default function Inventory() {
 
       {/* Búsqueda */}
       <div className={styles.filterCard}>
-        <div className={styles.searchWrap}>
-          <Search size={18} className={styles.searchIcon} />
-          <input
-            type="text"
-            placeholder="Buscar por nombre o código..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className={styles.searchInput}
-          />
+        <div className={styles.filterToolbar}>
+          <div className={styles.searchWrap}>
+            <Search size={18} className={styles.searchIcon} />
+            <input
+              type="text"
+              placeholder="Buscar por nombre o código..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className={styles.searchInput}
+            />
+          </div>
+          <button
+            type="button"
+            className={styles.btnFilter}
+            onClick={() => setShowAdvancedFilters((prev) => !prev)}
+          >
+            <SlidersHorizontal size={16} />
+            {showAdvancedFilters ? "Ocultar filtros" : "Filtrar inventario"}
+          </button>
         </div>
+
+        {showAdvancedFilters && (
+          <div className={styles.filtersPanel}>
+            <div className={styles.filtersGrid}>
+              <div className={styles.formGroup}>
+                <label>Estado del producto</label>
+                <select
+                  value={draftFilters.productStatus}
+                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, productStatus: e.target.value }))}
+                >
+                  <option value="">Todos</option>
+                  <option value="activo">Activo</option>
+                  <option value="inactivo">Inactivo</option>
+                </select>
+              </div>
+
+              <div className={styles.formGroup}>
+                <label>Estado del lote</label>
+                <select
+                  value={draftFilters.lotStatus}
+                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, lotStatus: e.target.value }))}
+                >
+                  <option value="">Todos</option>
+                  <option value="activo">Activo</option>
+                  <option value="inactivo">Inactivo</option>
+                </select>
+              </div>
+
+              <div className={styles.formGroup}>
+                <label>Proveedor</label>
+                <select
+                  value={draftFilters.supplierId}
+                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, supplierId: e.target.value }))}
+                >
+                  <option value="">Todos</option>
+                  {suppliers.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className={styles.formGroup}>
+                <label>Vence desde</label>
+                <input
+                  type="date"
+                  value={draftFilters.expiryFrom}
+                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, expiryFrom: e.target.value }))}
+                />
+              </div>
+
+              <div className={styles.formGroup}>
+                <label>Vence hasta</label>
+                <input
+                  type="date"
+                  value={draftFilters.expiryTo}
+                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, expiryTo: e.target.value }))}
+                />
+              </div>
+
+              <div className={styles.formGroup}>
+                <label>Stock mínimo</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={draftFilters.stockMin}
+                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, stockMin: e.target.value }))}
+                />
+              </div>
+
+              <div className={styles.formGroup}>
+                <label>Stock máximo</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={draftFilters.stockMax}
+                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, stockMax: e.target.value }))}
+                />
+              </div>
+
+              <div className={styles.formGroup}>
+                <label>Precio venta mínimo</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={draftFilters.priceMin}
+                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, priceMin: e.target.value }))}
+                />
+              </div>
+
+              <div className={styles.formGroup}>
+                <label>Precio venta máximo</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={draftFilters.priceMax}
+                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, priceMax: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            <div className={styles.filtersActions}>
+              <button type="button" className={styles.btnOutline} onClick={handleClearFilters}>Limpiar</button>
+              <button type="button" className={styles.btnPrimary} onClick={handleApplyFilters}>Aplicar filtros</button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Tabla */}

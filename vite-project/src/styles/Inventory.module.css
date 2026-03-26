@@ -138,6 +138,64 @@
 
 .searchWrap { position: relative; }
 
+.filterToolbar {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+}
+
+@media (min-width: 900px) {
+  .filterToolbar {
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+}
+
+.btnFilter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.58rem 1rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  background: #f8fafc;
+  color: #1f2937;
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btnFilter:hover {
+  background: #eef2f7;
+}
+
+.filtersPanel {
+  margin-top: 1rem;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.filtersGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+}
+
+@media (min-width: 820px) {
+  .filtersGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.filtersActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
+
 .searchIcon {
   position: absolute;
   left: 0.875rem;
