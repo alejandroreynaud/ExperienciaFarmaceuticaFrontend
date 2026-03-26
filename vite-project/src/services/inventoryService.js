@@ -5,18 +5,33 @@ function toNumber(value, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function toBoolean(value, fallback = true) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true" || normalized === "1") return true;
+    if (normalized === "false" || normalized === "0") return false;
+  }
+  return fallback;
+}
+
 function normalizeProduct(product) {
   return {
     id: product?.id ?? product?._id,
     image: product?.image || product?.imagen || "💊",
     name: product?.name || product?.nombre || "",
     code: product?.code || product?.codigo || "",
-    active: product?.active ?? product?.activo ?? true,
-    description: product?.description || "",
+    active: toBoolean(product?.active ?? product?.activo, true),
+    description: product?.description || product?.descripcion || "",
     quantity: toNumber(product?.quantity ?? product?.stock, 0),
     cost: toNumber(product?.cost ?? product?.unitCost, 0),
     price: toNumber(product?.price ?? product?.salePrice, 0),
     expiryDate: product?.expiryDate || product?.expirationDate || "",
+    purchaseDate: product?.purchaseDate || product?.fecha_compra || "",
+    lotId: product?.lotId || null,
+    hasLots: Boolean(product?.hasLots),
+    lotCount: toNumber(product?.lotCount, 0),
   };
 }
 
@@ -25,6 +40,21 @@ function normalizeSupplier(supplier) {
     id: supplier?.id ?? supplier?._id,
     name: supplier?.name || supplier?.nombre || "",
     phone: supplier?.phone || supplier?.telefono || supplier?.phoneNumber || "",
+  };
+}
+
+function normalizeLot(lot) {
+  const quantity = toNumber(lot?.cantidad, 0);
+  const apiActive = toBoolean(lot?.lote_activo, true);
+  return {
+    id: lot?.id ?? lot?._id,
+    quantity,
+    initialQuantity: toNumber(lot?.cantidad_inicial, 0),
+    purchaseDate: lot?.fecha_compra || "",
+    expiryDate: lot?.fecha_vencimiento || "",
+    active: apiActive && quantity > 0,
+    cost: toNumber(lot?.precio_costo, 0),
+    price: toNumber(lot?.precio_venta, 0),
   };
 }
 
@@ -49,19 +79,59 @@ export async function getProducts() {
     if (!code) continue;
 
     const current = inventoryByCode.get(code) || {
+      active: false,
       quantity: 0,
       cost: 0,
       price: 0,
       expiryDate: "",
+      purchaseDate: "",
+      lotId: null,
+      lotCount: 0,
+      hasLots: false,
+      _fefoActiveExpiry: "",
+      _fefoAnyExpiry: "",
+      _fefoActivePurchase: "",
+      _fefoAnyPurchase: "",
+      _fefoActiveLotId: null,
+      _fefoAnyLotId: null,
+      _fefoActiveCost: 0,
+      _fefoAnyCost: 0,
+      _fefoActivePrice: 0,
+      _fefoAnyPrice: 0,
     };
 
-    current.quantity += toNumber(lot?.cantidad, 0);
+    current.lotCount += 1;
+    current.hasLots = true;
 
-    const lotExpiry = lot?.fecha_vencimiento || "";
-    if (!current.expiryDate || (lotExpiry && lotExpiry < current.expiryDate)) {
-      current.expiryDate = lotExpiry;
-      current.cost = toNumber(lot?.precio_costo, current.cost);
-      current.price = toNumber(lot?.precio_venta, current.price);
+    const lotQuantity = toNumber(lot?.cantidad, 0);
+    const isActiveLot = toBoolean(lot?.lote_activo, true);
+    const hasStock = lotQuantity > 0;
+
+    if (isActiveLot && hasStock) {
+      current.active = true;
+    }
+
+    // Stock in summary reflects physical inventory, not sale status.
+    // Toggling active/inactive must not change quantity.
+    if (hasStock) {
+      current.quantity += lotQuantity;
+
+      const lotExpiry = lot?.fecha_vencimiento || "";
+      if (!current._fefoAnyExpiry || (lotExpiry && lotExpiry < current._fefoAnyExpiry)) {
+        current._fefoAnyExpiry = lotExpiry;
+        current._fefoAnyPurchase = lot?.fecha_compra || current._fefoAnyPurchase;
+        current._fefoAnyLotId = lot?.id ?? current._fefoAnyLotId;
+        current._fefoAnyCost = toNumber(lot?.precio_costo, current._fefoAnyCost);
+        current._fefoAnyPrice = toNumber(lot?.precio_venta, current._fefoAnyPrice);
+      }
+
+      if (isActiveLot && (!current._fefoActiveExpiry || (lotExpiry && lotExpiry < current._fefoActiveExpiry))) {
+        current._fefoActiveExpiry = lotExpiry;
+        current._fefoActivePurchase = lot?.fecha_compra || current._fefoActivePurchase;
+        current._fefoActiveLotId = lot?.id ?? current._fefoActiveLotId;
+        current._fefoActiveCost = toNumber(lot?.precio_costo, current._fefoActiveCost);
+        current._fefoActivePrice = toNumber(lot?.precio_venta, current._fefoActivePrice);
+      }
     }
 
     inventoryByCode.set(code, current);
@@ -70,7 +140,28 @@ export async function getProducts() {
   return products.map((product) => {
     const base = normalizeProduct(product);
     const inventory = inventoryByCode.get(base.code);
-    return inventory ? { ...base, ...inventory } : base;
+    if (!inventory) return base;
+
+    const hasActiveFefo = Boolean(inventory._fefoActiveExpiry);
+    const expiryDate = hasActiveFefo ? inventory._fefoActiveExpiry : inventory._fefoAnyExpiry;
+    const purchaseDate = hasActiveFefo ? inventory._fefoActivePurchase : inventory._fefoAnyPurchase;
+    const lotId = hasActiveFefo ? inventory._fefoActiveLotId : inventory._fefoAnyLotId;
+    const cost = hasActiveFefo ? inventory._fefoActiveCost : inventory._fefoAnyCost;
+    const price = hasActiveFefo ? inventory._fefoActivePrice : inventory._fefoAnyPrice;
+
+    return {
+      ...base,
+      hasLots: inventory.hasLots,
+      lotCount: inventory.lotCount,
+      quantity: inventory.quantity,
+      expiryDate,
+      purchaseDate,
+      lotId,
+      cost,
+      price,
+      // For products with lots, summary status is driven by lots.
+      active: inventory.hasLots ? inventory.active : base.active,
+    };
   });
 }
 
@@ -93,6 +184,7 @@ export async function updateProduct(id, data) {
     nombre: data?.name,
     codigo: data?.code,
     imagen: data?.image || null,
+    descripcion: data?.description || "",
   };
 
   const updated = await apiRequest(`/productos/${id}`, {
@@ -102,14 +194,38 @@ export async function updateProduct(id, data) {
   return normalizeProduct(updated?.data || updated);
 }
 
+export async function updateInventoryLot(id, data) {
+  const payload = {
+    ...(data?.quantity !== undefined ? { cantidad: toNumber(data.quantity) } : {}),
+    ...(data?.expiryDate !== undefined ? { fecha_vencimiento: data.expiryDate } : {}),
+    ...(data?.cost !== undefined ? { precio_costo: toNumber(data.cost) } : {}),
+    ...(data?.price !== undefined ? { precio_venta: toNumber(data.price) } : {}),
+    ...(data?.lotActive !== undefined ? { lote_activo: Boolean(data.lotActive) } : {}),
+  };
+
+  const updated = await apiRequest(`/inventory/products/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+
+  return updated?.data || updated;
+}
+
+export async function setProductActive(id, active) {
+  const url = active ? `/productos/activar/${id}` : `/productos/desactivar/${id}`;
+  const updated = await apiRequest(url, { method: "PUT" });
+  return normalizeProduct(updated?.data || updated);
+}
+
 export async function deleteProduct(id) {
-  await apiRequest(`/productos/desactivar/${id}`, { method: "PUT" });
+  await setProductActive(id, false);
   return { success: true, id };
 }
 
 export async function registerLot(data) {
   const payload = {
     codigo: data?.code,
+    id_prov: toNumber(data?.supplierId),
     cantidad: toNumber(data.quantity),
     fecha_compra: data?.purchaseDate || new Date().toISOString().slice(0, 10),
     fecha_vencimiento: data?.expiryDate,
@@ -124,6 +240,26 @@ export async function registerLot(data) {
   });
 
   return result?.data || result;
+}
+
+export async function getProductLotsByCode(code) {
+  try {
+    const response = await apiRequest(`/inventory/products/${code}`);
+    const payload = response?.data || response;
+    const lots = Array.isArray(payload?.lotes)
+      ? payload.lotes
+      : Array.isArray(payload?.data?.lotes)
+        ? payload.data.lotes
+        : [];
+
+    return lots.map(normalizeLot);
+  } catch (error) {
+    const message = String(error?.message || "").toLowerCase();
+    if (message.includes("no hay registros de inventario para el codigo enviado")) {
+      return [];
+    }
+    throw error;
+  }
 }
 
 export async function getSuppliers() {
