@@ -16,12 +16,14 @@ export default function Sales() {
   const [products,       setProducts]       = useState([]);
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [loading,        setLoading]        = useState(true);
+  const [error,          setError]          = useState(null);
 
   const [search,        setSearch]        = useState("");
   const [cart,          setCart]          = useState([]);
   const [client,        setClient]        = useState("");
   const [paymentMethod, setPaymentMethod] = useState("");
   const [finalizing,    setFinalizing]    = useState(false);
+  const [saleError,     setSaleError]     = useState(null);
   const [lastSale,      setLastSale]      = useState(null);
 
   // ── Carga inicial ──────────────────────────────────────────────────────────
@@ -32,12 +34,14 @@ export default function Sales() {
         setPaymentMethods(methods);
         setPaymentMethod(methods[0] ?? "");
       })
+      .catch(() => setError("Error cargando los datos. Intenta de nuevo."))
       .finally(() => setLoading(false));
   }, []);
 
   // ── Filtrado de productos ──────────────────────────────────────────────────
   const filtered = products.filter((p) =>
-    p.name.toLowerCase().includes(search.toLowerCase())
+    p.name.toLowerCase().includes(search.toLowerCase()) ||
+    p.code.toLowerCase().includes(search.toLowerCase())
   );
 
   // ── Carrito ────────────────────────────────────────────────────────────────
@@ -72,26 +76,34 @@ export default function Sales() {
     setCart([]);
     setClient("");
     setPaymentMethod(paymentMethods[0] ?? "");
+    setSaleError(null);
   }
 
   // ── Totales ────────────────────────────────────────────────────────────────
-  const { subtotal, tax, total } = calculateTotals(cart);
+  const { subtotal, total } = calculateTotals(cart);
 
   // ── Finalizar venta ────────────────────────────────────────────────────────
   async function handleFinalize() {
     if (cart.length === 0) return;
+    setSaleError(null);
     setFinalizing(true);
     try {
       const sale = await createSale({
         client,
         paymentMethod,
-        items: cart.map((i) => ({ id: i.id, name: i.name, price: i.price, quantity: i.quantity })),
-        subtotal,
-        tax,
-        total,
+        items: cart.map((i) => ({
+          id:       i.id,
+          code:     i.code,
+          price:    i.price,
+          quantity: i.quantity,
+        })),
       });
       setLastSale(sale);
       clearCart();
+      const updatedProducts = await getSaleProducts();
+      setProducts(updatedProducts);
+    } catch (err) {
+      setSaleError(err.message);
     } finally {
       setFinalizing(false);
     }
@@ -107,10 +119,21 @@ export default function Sales() {
         <p className={styles.subtitle}>Registra nuevas ventas</p>
       </div>
 
+      {/* Error de carga inicial */}
+      {error && (
+        <div className={styles.errorBanner}>
+          <span>⚠ {error}</span>
+          <button className={styles.bannerClose} onClick={() => setError(null)}>✕</button>
+        </div>
+      )}
+
       {/* Confirmación de última venta */}
       {lastSale && (
         <div className={styles.successBanner}>
-          <span>✓ Venta <strong>{lastSale.saleNumber}</strong> registrada por <strong>L. {Number(lastSale.total).toFixed(2)}</strong></span>
+          <span>
+            ✓ Venta <strong>{lastSale.saleNumber}</strong> registrada por{" "}
+            <strong>L. {Number(lastSale.total).toFixed(2)}</strong>
+          </span>
           <button className={styles.bannerClose} onClick={() => setLastSale(null)}>✕</button>
         </div>
       )}
@@ -126,7 +149,7 @@ export default function Sales() {
               <Search size={18} className={styles.searchIcon} />
               <input
                 type="text"
-                placeholder="Buscar productos..."
+                placeholder="Buscar por nombre o código..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className={styles.searchInput}
@@ -158,6 +181,7 @@ export default function Sales() {
                         <h4 className={styles.productCardName}>{p.name}</h4>
                         <Plus size={18} color="#2563eb" />
                       </div>
+                      <p className={styles.productCardCode}>{p.code}</p>
                       <p className={styles.productCardPrice}>L. {p.price.toFixed(2)}</p>
                       <p className={styles.productCardStock}>
                         Stock: {p.stock} {p.stock === 0 ? "— Agotado" : "unidades"}
@@ -173,10 +197,16 @@ export default function Sales() {
 
           {/* Cliente */}
           <div className={styles.sideCard}>
-            <label className={styles.sideLabel}>Cliente</label>
+            <label className={styles.sideLabel}>
+              Cliente {paymentMethod === "credito" && <span className={styles.required}>*obligatorio</span>}
+            </label>
             <input
               type="text"
-              placeholder="Nombre del cliente (opcional)"
+              placeholder={
+                paymentMethod === "credito"
+                  ? "ID del cliente (requerido para crédito)"
+                  : "Nombre del cliente (opcional)"
+              }
               value={client}
               onChange={(e) => setClient(e.target.value)}
               className={styles.sideInput}
@@ -195,7 +225,9 @@ export default function Sales() {
                   className={styles.sideSelect}
                 >
                   {paymentMethods.map((m) => (
-                    <option key={m} value={m}>{m}</option>
+                    <option key={m} value={m}>
+                      {m.charAt(0).toUpperCase() + m.slice(1)}
+                    </option>
                   ))}
                 </select>
               )}
@@ -230,6 +262,9 @@ export default function Sales() {
                           className={styles.qtyBtn}
                           onClick={() => updateQuantity(item.id, item.quantity + 1)}
                         >+</button>
+                        <span className={styles.cartItemSubtotal}>
+                          L. {(item.price * item.quantity).toFixed(2)}
+                        </span>
                         <button
                           className={styles.removeBtn}
                           onClick={() => removeFromCart(item.id)}
@@ -248,25 +283,34 @@ export default function Sales() {
                   <span>Subtotal</span>
                   <span>L. {subtotal.toFixed(2)}</span>
                 </div>
-                <div className={styles.totalRow}>
-                  <span>ISV (15%)</span>
-                  <span>L. {tax.toFixed(2)}</span>
-                </div>
                 <div className={styles.totalRowFinal}>
                   <span>Total</span>
                   <span>L. {total.toFixed(2)}</span>
                 </div>
+
+                {/* Error de venta */}
+                {saleError && (
+                  <div className={styles.saleError}>
+                    ⚠ {saleError}
+                  </div>
+                )}
+
                 <button
                   className={styles.btnFinalize}
                   onClick={handleFinalize}
-                  disabled={finalizing}
+                  disabled={finalizing || (paymentMethod === "credito" && !client)}
                 >
                   {finalizing ? "Procesando..." : "Finalizar Venta"}
                 </button>
+
+                {paymentMethod === "credito" && !client && (
+                  <p className={styles.creditWarning}>
+                    Ingresa el ID del cliente para ventas a crédito
+                  </p>
+                )}
               </div>
             )}
           </div>
-
         </div>
       </div>
     </div>

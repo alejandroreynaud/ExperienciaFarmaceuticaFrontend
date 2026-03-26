@@ -212,6 +212,13 @@
   border: 1px solid #f3f4f6; border-radius: 0.625rem;
   padding: 1rem; display: flex; flex-direction: column; gap: 0.5rem;
 }
+.cartItemSubtotal {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #1e40af;
+  min-width: 60px;
+  text-align: right;
+}
 .skeletonName  { height: 14px; width: 80%; }
 .skeletonPrice { height: 22px; width: 50%; }
 .skeletonStock { height: 12px; width: 60%; }

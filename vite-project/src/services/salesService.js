@@ -1,66 +1,69 @@
-/**
- * salesService.js
- *
- * Módulo de Ventas (POS).
- * TODO: conectar con backend según endpoints indicados.
- */
-
-const MOCK_PRODUCTS = [
-  { id: 1, name: "Paracetamol 500mg",   price: 5.0,  stock: 150 },
-  { id: 2, name: "Ibuprofeno 400mg",    price: 6.5,  stock: 80  },
-  { id: 3, name: "Amoxicilina 500mg",   price: 15.0, stock: 45  },
-  { id: 4, name: "Omeprazol 20mg",      price: 9.0,  stock: 120 },
-  { id: 5, name: "Losartán 50mg",       price: 10.5, stock: 95  },
-  { id: 6, name: "Metformina 850mg",    price: 8.0,  stock: 110 },
-  { id: 7, name: "Atorvastatina 20mg",  price: 12.5, stock: 65  },
-];
-
-const MOCK_PAYMENT_METHODS = ["Efectivo", "Tarjeta", "Transferencia"];
-
-const TAX_RATE = 0.15; // ISV Honduras 15%
-
-const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+const API_URL = "http://localhost:3008/api";
 
 /**
- * Productos disponibles para la venta con precio y stock actual.
- * TODO: reemplazar con → GET /api/sales/products
+ * Productos disponibles para venta con stock y precio real
+ * GET /ventas/productos
  */
 export async function getSaleProducts() {
-  await delay(500);
-  return MOCK_PRODUCTS;
+  const res = await fetch(`${API_URL}/ventas/productos`);
+  if (!res.ok) throw new Error("Error obteniendo productos");
+  const json = await res.json();
+
+  return json.data.map((p) => ({
+    id:    p.id,
+    name:  p.nombre,
+    code:  p.codigo,
+    price: p.precio_venta,
+    stock: p.stock,
+  }));
 }
 
 /**
- * Métodos de pago disponibles.
- * TODO: reemplazar con → GET /api/sales/payment-methods
+ * Métodos de pago — enum del backend
  */
 export async function getPaymentMethods() {
-  await delay(200);
-  return MOCK_PAYMENT_METHODS;
+  return ["efectivo", "credito", "tarjeta", "transferencia"];
 }
 
 /**
- * Registra una venta completa.
- * @param {object} saleData - { client, paymentMethod, items, subtotal, tax, total }
- * TODO: reemplazar con → POST /api/sales
+ * Registra una venta completa
+ * POST /ventas
  */
-export async function createSale(saleData) {
-  await delay(600);
+export async function createSale({ client, paymentMethod, items }) {
+  const body = {
+    id_vendedor: 1, // TODO: reemplazar con usuario autenticado
+    id_cliente:  client ? Number(client) : null,
+    metodo_pago: paymentMethod.toLowerCase(),
+    productos:   items.map((i) => ({
+      codigo:   i.code,
+      cantidad: i.quantity,
+    })),
+  };
+
+  const res = await fetch(`${API_URL}/ventas`, {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify(body),
+  });
+
+  const json = await res.json();
+
+  if (!res.ok) {
+    throw new Error(json.message || "Error creando la venta");
+  }
+
   return {
-    id:           Date.now(),
-    saleNumber:   `VTA-${Date.now()}`,
-    date:         new Date().toISOString(),
-    ...saleData,
+    id:         json.data.venta.id,
+    saleNumber: json.data.factura.num_factura,
+    date:       json.data.venta.fecha,
+    total:      json.data.venta.total,
   };
 }
 
 /**
- * Calcula los totales de una venta.
- * Esta lógica puede quedar en el frontend o delegarse al backend.
+ * Calcula totales — sin ISV
  */
 export function calculateTotals(items) {
-  const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const tax      = subtotal * TAX_RATE;
-  const total    = subtotal + tax;
-  return { subtotal, tax, total, taxRate: TAX_RATE };
+  const total = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
+  return { subtotal: total, tax: 0, total };
 }
