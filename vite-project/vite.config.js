@@ -7,11 +7,12 @@ export default defineConfig({
       jsxRuntime: "automatic",
     }),
   ],
+  
   server: {
     host: true,
     proxy: {
       "/api": {
-        target: process.env.VITE_BACKEND_PROXY_TARGET || "http://localhost:3000",
+        target: process.env.VITE_BACKEND_PROXY_TARGET || "http://localhost:3008",
         changeOrigin: true,
       },
     },
