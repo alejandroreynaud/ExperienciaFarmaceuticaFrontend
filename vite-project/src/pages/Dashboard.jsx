@@ -10,6 +10,7 @@ import {
 } from "recharts";
 import {
   getDashboardStats,
+  getDailyAnalysis,
   getWeeklySales,
   getMonthlyRevenue,
   getNotifications,
@@ -193,13 +194,14 @@ function ExpiringModal({ onClose }) {
 // ── Componente principal ──────────────────────────────────────────────────────
 export default function Dashboard() {
   const [stats,         setStats]         = useState([]);
+  const [daily,         setDaily]         = useState(null);
   const [weeklySales,   setWeeklySales]   = useState([]);
   const [monthlyRev,    setMonthlyRev]    = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [lowStock,      setLowStock]      = useState([]);
 
   const [loading, setLoading] = useState({
-    stats: true, charts: true, notifications: true, lowStock: true,
+    stats: true, daily: true, charts: true, notifications: true, lowStock: true,
   });
 
   // Modal activo: "low_stock" | "expiring" | null
@@ -209,6 +211,10 @@ export default function Dashboard() {
     getDashboardStats()
       .then(setStats)
       .finally(() => setLoading((p) => ({ ...p, stats: false })));
+
+    getDailyAnalysis()
+      .then(setDaily)
+      .finally(() => setLoading((p) => ({ ...p, daily: false })));
 
     Promise.all([getWeeklySales(), getMonthlyRevenue()])
       .then(([w, m]) => { setWeeklySales(w); setMonthlyRev(m); })
@@ -264,6 +270,41 @@ export default function Dashboard() {
                 </div>
               );
             })}
+      </div>
+
+      {/* Analisis diario */}
+      <div className={styles.card}>
+        <div className={styles.dailyHeader}>
+          <h3 className={styles.cardTitle}>Analisis Diario</h3>
+          {!loading.daily && daily?.fecha && (
+            <span className={styles.dailyDate}>{daily.fecha}</span>
+          )}
+        </div>
+
+        {loading.daily
+          ? (
+            <div className={styles.dailyGrid}>
+              <Skeleton className={styles.skeletonDailyCard} />
+              <Skeleton className={styles.skeletonDailyCard} />
+              <Skeleton className={styles.skeletonDailyCard} />
+            </div>
+          )
+          : (
+            <div className={styles.dailyGrid}>
+              <div className={styles.dailyItem}>
+                <p className={styles.dailyLabel}>Total vendido hoy</p>
+                <p className={styles.dailyValue}>{daily?.total ?? "L. 0.00"}</p>
+              </div>
+              <div className={styles.dailyItem}>
+                <p className={styles.dailyLabel}>Numero de ventas</p>
+                <p className={styles.dailyValue}>{daily?.sales ?? 0}</p>
+              </div>
+              <div className={styles.dailyItem}>
+                <p className={styles.dailyLabel}>Ticket promedio</p>
+                <p className={styles.dailyValue}>{daily?.ticketPromedio ?? "L. 0.00"}</p>
+              </div>
+            </div>
+          )}
       </div>
 
       {/* Gráficas */}

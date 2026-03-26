@@ -1,157 +1,165 @@
-/**
- * dashboardService.js
- *
- * Todos los datos del Dashboard viven aquí.
- * Para conectar con el backend, reemplaza cada función
- * según el endpoint indicado en el comentario TODO.
- */
+const API_URL = "http://localhost:3008/api";
 
-// ─── Mocks ────────────────────────────────────────────────────────────────────
+async function fetchJson(path) {
+  const res = await fetch(`${API_URL}${path}`, { cache: "no-store" });
+  const contentType = res.headers.get("content-type") || "";
+  const isJson = contentType.includes("application/json");
+  const payload = isJson ? await res.json() : await res.text();
 
-const MOCK_STATS = [
-  { id: "ventas_dia",       title: "Ventas del Día",          value: "L. 45,230.50", trend: "+12%",      color: "green"  },
-  { id: "bajo_stock",       title: "Productos Bajo Stock",    value: "23",           trend: "Crítico",   color: "orange" },
-  { id: "proximos_vencer",  title: "Próximos a Vencer",       value: "8",            trend: "15 días",   color: "red"    },
-  { id: "total_inventario", title: "Total Inventario",        value: "1,234",        trend: "Productos", color: "blue"   },
-];
+  if (!res.ok) {
+    const message =
+      (isJson && payload && (payload.message || payload.error)) ||
+      `Request failed with status ${res.status}`;
+    throw new Error(message);
+  }
 
-const MOCK_WEEKLY_SALES = [
-  { name: "Lun", ventas: 4200 },
-  { name: "Mar", ventas: 3800 },
-  { name: "Mié", ventas: 5100 },
-  { name: "Jue", ventas: 4600 },
-  { name: "Vie", ventas: 6200 },
-  { name: "Sáb", ventas: 5800 },
-  { name: "Dom", ventas: 4900 },
-];
-
-const MOCK_MONTHLY_REVENUE = [
-  { name: "Ene", ingresos: 45000 },
-  { name: "Feb", ingresos: 52000 },
-  { name: "Mar", ingresos: 48000 },
-  { name: "Abr", ingresos: 61000 },
-  { name: "May", ingresos: 55000 },
-  { name: "Jun", ingresos: 67000 },
-];
-
-// Notificaciones — cada una con su detalle según tipo
-const MOCK_NOTIFICATIONS = [
-  {
-    id: 1,
-    type: "warning",
-    title: "Stock Bajo",
-    message: "5 productos por debajo del mínimo",
-    time: "Hace 5 min",
-    detailType: "low_stock",
-  },
-  {
-    id: 2,
-    type: "danger",
-    title: "Próximos a Vencer",
-    message: "4 productos vencen en menos de 30 días",
-    time: "Hace 1 hora",
-    detailType: "expiring",
-  },
-  /*
-  {
-    id: 3,
-    type: "success",
-    title: "Venta Completada",
-    message: "Venta #1234 por L. 850.00",
-    time: "Hace 2 horas",
-    detailType: null,
-  },
-  
-  {
-    id: 4,
-    type: "info",
-    title: "Lote Registrado",
-    message: "Se registró un nuevo lote de Paracetamol 500mg",
-    time: "Hace 3 horas",
-    detailType: null,
-  },
-  */
-];
-
-const MOCK_LOW_STOCK = [
-  { name: "Paracetamol 500mg", stock: 15, min: 50 },
-  { name: "Ibuprofeno 400mg",  stock: 8,  min: 30 },
-  { name: "Amoxicilina 500mg", stock: 12, min: 40 },
-  { name: "Omeprazol 20mg",    stock: 5,  min: 25 },
-  { name: "Losartán 50mg",     stock: 18, min: 35 },
-];
-
-// Detalle de productos próximos a vencer
-const MOCK_EXPIRING_DETAIL = [
-  { name: "Amoxicilina 500mg",    quantity: 45, expiryDate: "2024-09-15", daysLeft: 10 },
-  { name: "Diclofenac 75mg",      quantity: 30, expiryDate: "2024-09-20", daysLeft: 15 },
-  { name: "Ciprofloxacino 500mg", quantity: 25, expiryDate: "2024-09-25", daysLeft: 20 },
-  { name: "Ranitidina 150mg",     quantity: 18, expiryDate: "2024-10-01", daysLeft: 26 },
-];
-
-const delay = (ms) => new Promise((r) => setTimeout(r, ms));
-
-// ─── Servicios ────────────────────────────────────────────────────────────────
-
-/**
- * KPIs principales (4 tarjetas superiores).
- * TODO: reemplazar con → GET /api/dashboard/stats
- */
-export async function getDashboardStats() {
-  await delay(600);
-  return MOCK_STATS;
+  return payload;
 }
 
-/**
- * Ventas por día de la semana actual.
- * TODO: reemplazar con → GET /api/dashboard/weekly-sales
- */
-export async function getWeeklySales() {
-  await delay(700);
-  return MOCK_WEEKLY_SALES;
+function money(value) {
+  return `L. ${Number(value || 0).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
-/**
- * Ingresos mensuales (últimos 6 meses).
- * TODO: reemplazar con → GET /api/dashboard/monthly-revenue
- */
-export async function getMonthlyRevenue() {
-  await delay(700);
-  return MOCK_MONTHLY_REVENUE;
-}
-
-/**
- * Notificaciones recientes del sistema.
- * TODO: reemplazar con → GET /api/notifications?limit=10
- */
-export async function getNotifications() {
-  await delay(500);
-  return MOCK_NOTIFICATIONS;
-}
-
-/**
- * Productos con stock por debajo del mínimo.
- * TODO: reemplazar con → GET /api/inventory/low-stock
- */
 export async function getLowStockProducts() {
-  await delay(600);
-  return MOCK_LOW_STOCK;
+  const payload = await fetchJson("/inventory/products/alertas/bajo-stock?umbral=50");
+  const list = Array.isArray(payload?.data) ? payload.data : [];
+
+  return list.map((item) => ({
+    name: item.nombre,
+    stock: Number(item.stock_total || 0),
+    min: Number(item.umbral || 50),
+  }));
 }
 
-/**
- * Detalle de productos próximos a vencer.
- * TODO: reemplazar con → GET /api/inventory/expiring?days=30
- */
-export async function getExpiringDetail() {
-  await delay(400);
-  return MOCK_EXPIRING_DETAIL;
-}
-
-/**
- * Detalle completo de stock bajo (igual que low-stock pero con más info).
- * TODO: reemplazar con → GET /api/inventory/low-stock?detail=true
- */
 export async function getLowStockDetail() {
-  await delay(400);
-  return MOCK_LOW_STOCK;
+  return getLowStockProducts();
+}
+
+export async function getExpiringDetail(days = 30) {
+  const payload = await fetchJson(`/inventory/products/alertas/por-vencer?dias=${Number(days) || 30}`);
+  const list = Array.isArray(payload?.data) ? payload.data : [];
+
+  return list.map((item) => ({
+    name: item.nombre,
+    quantity: Number(item.cantidad || 0),
+    expiryDate: item.fecha_vencimiento,
+    daysLeft: Number(item.dias_para_vencer || 0),
+  }));
+}
+
+export async function getWeeklySales() {
+  const payload = await fetchJson("/semanal");
+  const list = Array.isArray(payload) ? payload : [];
+  return list.map((item) => ({
+    name: item.dia,
+    ventas: Number(item.total || 0),
+  }));
+}
+
+export async function getMonthlyRevenue() {
+  const payload = await fetchJson("/mensual");
+  const list = Array.isArray(payload) ? payload : [];
+  return list.map((item) => ({
+    name: item.mes,
+    ingresos: Number(item.total || 0),
+  }));
+}
+
+export async function getDailyAnalysis() {
+  const hoy = await fetchJson("/hoy");
+
+  const total = Number(hoy?.total || 0);
+  const sales = Number(hoy?.cantidad_ventas || 0);
+  const ticketPromedio = sales > 0 ? total / sales : 0;
+
+  return {
+    fecha: new Date().toLocaleDateString("es-HN", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    }),
+    total: money(total),
+    sales,
+    ticketPromedio: money(ticketPromedio),
+  };
+}
+
+export async function getDashboardStats() {
+  const [hoy, lowStock, expiring, stockSummary] = await Promise.all([
+    fetchJson("/hoy"),
+    getLowStockProducts(),
+    getExpiringDetail(30),
+    fetchJson("/inventory/products/reporte/stock-total"),
+  ]);
+
+  const totalProductos = Array.isArray(stockSummary?.data) ? stockSummary.data.length : 0;
+
+  return [
+    {
+      id: "ventas_dia",
+      title: "Ventas del Día",
+      value: money(hoy?.total || 0),
+      trend: `${Number(hoy?.cantidad_ventas || 0)} venta(s)`,
+      color: "green",
+    },
+    {
+      id: "bajo_stock",
+      title: "Productos Bajo Stock",
+      value: String(lowStock.length),
+      trend: "Umbral 50",
+      color: "orange",
+    },
+    {
+      id: "proximos_vencer",
+      title: "Próximos a Vencer",
+      value: String(expiring.length),
+      trend: "30 días",
+      color: "red",
+    },
+    {
+      id: "total_inventario",
+      title: "Total Inventario",
+      value: String(totalProductos),
+      trend: "Productos",
+      color: "blue",
+    },
+  ];
+}
+
+export async function getNotifications() {
+  const [lowStock, expiring, hoy] = await Promise.all([
+    getLowStockProducts(),
+    getExpiringDetail(30),
+    fetchJson("/hoy"),
+  ]);
+
+  return [
+    {
+      id: 1,
+      type: "warning",
+      title: "Stock Bajo",
+      message: `${lowStock.length} productos por debajo del mínimo`,
+      time: "Actualizado hoy",
+      detailType: "low_stock",
+    },
+    {
+      id: 2,
+      type: "danger",
+      title: "Próximos a Vencer",
+      message: `${expiring.length} productos vencen en menos de 30 días`,
+      time: "Actualizado hoy",
+      detailType: "expiring",
+    },
+    {
+      id: 3,
+      type: "success",
+      title: "Ventas del Día",
+      message: `${Number(hoy?.cantidad_ventas || 0)} venta(s) por ${money(hoy?.total || 0)}`,
+      time: "Corte del día",
+      detailType: null,
+    },
+  ];
 }

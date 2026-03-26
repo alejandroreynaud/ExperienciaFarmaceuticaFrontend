@@ -83,6 +83,50 @@ export async function getStockSummaryReport() {
   };
 }
 
+export async function getSalesReport(fecha) {
+  const dateText = String(fecha || new Date().toISOString().slice(0, 10));
+  const payload = await fetchJson(`/ventas?fecha=${encodeURIComponent(dateText)}`);
+  const ventas = Array.isArray(payload?.data) ? payload.data : [];
+
+  const summary = ventas.reduce(
+    (acc, v) => {
+      const total = Number(v.total || 0);
+      const detalles = Array.isArray(v?.Factura?.DetalleFacturas)
+        ? v.Factura.DetalleFacturas
+        : [];
+      const unidades = detalles.reduce((s, d) => s + Number(d.cantidad || 0), 0);
+      const metodo = String(v.metodo_pago || "desconocido").toLowerCase();
+
+      acc.totalVentas += 1;
+      acc.totalMonto += total;
+      acc.totalUnidades += unidades;
+      acc.porMetodo[metodo] = (acc.porMetodo[metodo] || 0) + total;
+      return acc;
+    },
+    {
+      totalVentas: 0,
+      totalMonto: 0,
+      totalUnidades: 0,
+      porMetodo: {},
+    },
+  );
+
+  return {
+    summary,
+    ventas: ventas.map((v) => ({
+      id: v.id,
+      numeroFactura: v?.Factura?.num_factura || `V-${v.id}`,
+      fecha: v.fecha,
+      metodoPago: v.metodo_pago || "-",
+      clienteId: v.id_cliente ?? "-",
+      total: Number(v.total || 0),
+      items: Array.isArray(v?.Factura?.DetalleFacturas)
+        ? v.Factura.DetalleFacturas.reduce((s, d) => s + Number(d.cantidad || 0), 0)
+        : 0,
+    })),
+  };
+}
+
 export async function downloadReportPDF(type, params = {}) {
   const reportType = String(type || "stock").trim().toLowerCase();
   let endpoint = `${API_URL}/inventory/export/pdf`;
@@ -91,6 +135,8 @@ export async function downloadReportPDF(type, params = {}) {
     endpoint = `${API_URL}/inventory/export/pdf/expiring?dias=${Number(params.days) || 30}`;
   } else if (reportType === "low-stock") {
     endpoint = `${API_URL}/inventory/export/pdf/low-stock?umbral=${Number(params.threshold) || 10}`;
+  } else if (reportType !== "stock") {
+    throw new Error("La exportacion PDF no esta disponible para este reporte.");
   }
 
   const res = await fetch(endpoint, { method: "GET" });

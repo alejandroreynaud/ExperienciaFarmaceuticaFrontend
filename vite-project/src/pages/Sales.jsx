@@ -100,10 +100,14 @@ export default function Sales() {
   }
 
   function updateQuantity(id, qty) {
-    if (qty <= 0) { removeFromCart(id); return; }
+    const normalizedQty = Number(qty);
+    if (!Number.isFinite(normalizedQty)) return;
+    if (normalizedQty <= 0) { removeFromCart(id); return; }
     setCart((prev) =>
       prev.map((i) =>
-        i.id === id ? { ...i, quantity: Math.min(qty, i.stock) } : i
+        i.id === id
+          ? { ...i, quantity: Math.max(1, Math.min(Math.floor(normalizedQty), i.stock)) }
+          : i
       )
     );
   }
@@ -308,7 +312,14 @@ export default function Sales() {
                           className={styles.qtyBtn}
                           onClick={() => updateQuantity(item.id, item.quantity - 1)}
                         >−</button>
-                        <span className={styles.qtyValue}>{item.quantity}</span>
+                        <input
+                          type="number"
+                          min="1"
+                          max={item.stock}
+                          value={item.quantity}
+                          onChange={(e) => updateQuantity(item.id, e.target.value)}
+                          className={styles.qtyInput}
+                        />
                         <button
                           className={styles.qtyBtn}
                           onClick={() => updateQuantity(item.id, item.quantity + 1)}

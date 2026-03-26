@@ -1,56 +1,67 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Plus, Search, Trash2, Upload, X, Eye, FileText } from "lucide-react";
 import {
   getInvoices,
   getSuppliers,
   getAvailableProducts,
   createInvoice,
-  deleteInvoice,
+  createSupplier,
+  createProductFromPurchases,
   getPurchasesSummary,
 } from "../services/purchasesService";
 import styles from "../styles/Purchases.module.css";
 
-// ── Formulario vacío ──────────────────────────────────────────────────────────
 const EMPTY_FORM = {
   invoiceNumber: "",
   supplier:      "",
   rtn:           "",
   invoiceDate:   new Date().toISOString().split("T")[0],
+  paymentMethod: "efectivo",
+  total:         "",
 };
 
-const EMPTY_PRODUCT_ROW = { productId: "", quantity: "", expiryDate: "" };
+const EMPTY_PRODUCT_ROW_WITH_PRICE = {
+  productId: "",
+  quantity: "",
+  unitPrice: "",
+  salePrice: "",
+  expiryDate: "",
+};
 
-// ── Skeleton ──────────────────────────────────────────────────────────────────
 function Skeleton({ className }) {
   return <div className={`${styles.skeleton} ${className ?? ""}`} />;
 }
 
-// ── Componente principal ──────────────────────────────────────────────────────
 export default function Purchases() {
-  const [invoices,    setInvoices]    = useState([]);
-  const [suppliers,   setSuppliers]   = useState([]);
-  const [catalog,     setCatalog]     = useState([]);
-  const [summary,     setSummary]     = useState(null);
-  const [loading,     setLoading]     = useState(true);
+  const [invoices,  setInvoices]  = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
+  const [catalog,   setCatalog]   = useState([]);
+  const [summary,   setSummary]   = useState(null);
+  const [loading,   setLoading]   = useState(true);
 
   const [search, setSearch] = useState("");
 
   // Modal nueva factura
-  const [showModal,      setShowModal]      = useState(false);
-  const [formData,       setFormData]       = useState(EMPTY_FORM);
-  const [invoiceProds,   setInvoiceProds]   = useState([]);
-  const [currentRow,     setCurrentRow]     = useState(EMPTY_PRODUCT_ROW);
-  const [invoiceImage,   setInvoiceImage]   = useState(null);
-  const [saving,         setSaving]         = useState(false);
+  const [showModal,    setShowModal]    = useState(false);
+  const [formData,     setFormData]     = useState(EMPTY_FORM);
+  const [invoiceProds, setInvoiceProds] = useState([]);
+  const [currentRow,   setCurrentRow]   = useState(EMPTY_PRODUCT_ROW_WITH_PRICE);
+  const [invoiceImage, setInvoiceImage] = useState(null);
+  const [saving,       setSaving]       = useState(false);
 
   // Modal detalle
   const [selectedInvoice, setSelectedInvoice] = useState(null);
 
-  // Modal confirmar eliminación
-  const [deleteTarget, setDeleteTarget] = useState(null);
-  const [deleting,     setDeleting]     = useState(false);
 
-  // ── Carga inicial ──────────────────────────────────────────────────────────
+  // Mini formulario proveedor
+  const [showSupplierForm, setShowSupplierForm] = useState(false);
+  const [newSupplier,      setNewSupplier]      = useState({ nombre: "", telefono: "" });
+  const [savingSupplier,   setSavingSupplier]   = useState(false);
+  const [showProductForm, setShowProductForm] = useState(false);
+  const [newProduct, setNewProduct] = useState({ code: "", name: "", image: "" });
+  const [savingProduct, setSavingProduct] = useState(false);
+
+  // ── Carga inicial ────────────────────────────────────────────────────────
   useEffect(() => {
     Promise.all([
       getInvoices(),
@@ -65,82 +76,194 @@ export default function Purchases() {
     }).finally(() => setLoading(false));
   }, []);
 
-  // ── Filtrado ───────────────────────────────────────────────────────────────
-  const filtered = invoices.filter((inv) =>
-    inv.supplier.toLowerCase().includes(search.toLowerCase()) ||
-    inv.invoiceNumber.toLowerCase().includes(search.toLowerCase())
+  const productsTotal = useMemo(
+    () => invoiceProds.reduce((acc, p) => acc + Number(p.subtotal || 0), 0),
+    [invoiceProds],
   );
 
-  // ── Agregar producto a la fila temporal ───────────────────────────────────
+  const filtered = invoices.filter((inv) => {
+    const supplier = String(inv?.supplier ?? "").toLowerCase();
+    const invoiceNumber = String(inv?.invoiceNumber ?? "").toLowerCase();
+    const text = search.toLowerCase();
+    return supplier.includes(text) || invoiceNumber.includes(text);
+  });
+
   function handleAddProductRow() {
-    if (!currentRow.productId || !currentRow.quantity || !currentRow.expiryDate) return;
-    const prod = catalog.find((p) => p.id === currentRow.productId);
+    if (!currentRow.productId || !currentRow.quantity || !currentRow.unitPrice || !currentRow.salePrice || !currentRow.expiryDate) {
+      alert("Por favor completa los datos del producto (Producto, Cantidad, Costo, Precio de venta y Vencimiento)");
+      return;
+    }
+
+    const quantity = Number(currentRow.quantity);
+    const unitPrice = Number(currentRow.unitPrice);
+    const salePrice = Number(currentRow.salePrice);
+    if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitPrice) || unitPrice <= 0) {
+      alert("Cantidad y costo unitario deben ser mayores a 0.");
+      return;
+    }
+    if (!Number.isFinite(salePrice) || salePrice <= 0) {
+      alert("El precio de venta debe ser mayor a 0.");
+      return;
+    }
+    if (salePrice < unitPrice) {
+      alert("El precio de venta no puede ser menor al costo.");
+      return;
+    }
+
+    const prod = catalog.find((p) => String(p.id) === String(currentRow.productId));
+    
     if (!prod) return;
+
+    const exists = invoiceProds.some(p => String(p.productId) === String(prod.id));
+    if (exists) {
+        alert("Este producto ya está en la lista de la factura.");
+        return;
+    }
+
     setInvoiceProds((prev) => [
       ...prev,
       {
-        productId:   prod.id,
-        productName: prod.name,
-        quantity:    Number(currentRow.quantity),
+        productId:   prod.id,      // ID de la DB
+        productCode: prod.code,    // Para mostrar en la tablita
+        productName: prod.name,    // Para mostrar en la tablita
+        quantity,
+        unitPrice,
+        salePrice,
+        subtotal: quantity * unitPrice,
         expiryDate:  currentRow.expiryDate,
       },
     ]);
-    setCurrentRow(EMPTY_PRODUCT_ROW);
+
+    setCurrentRow(EMPTY_PRODUCT_ROW_WITH_PRICE);
   }
 
   function handleRemoveProductRow(index) {
     setInvoiceProds((prev) => prev.filter((_, i) => i !== index));
   }
 
-  // ── Guardar factura ────────────────────────────────────────────────────────
   async function handleSave(e) {
-    e.preventDefault();
-    if (invoiceProds.length === 0) {
-      alert("Agrega al menos un producto a la factura.");
-      return;
-    }
-    setSaving(true);
-    try {
-      const created = await createInvoice({
-        ...formData,
-        products:  invoiceProds,
-        total:     0, // TODO: calcular desde backend o desde costos del lote
-        imageFile: invoiceImage,
-      });
-      setInvoices((prev) => [created, ...prev]);
-      setShowModal(false);
-      setFormData(EMPTY_FORM);
-      setInvoiceProds([]);
-      setInvoiceImage(null);
-    } finally {
-      setSaving(false);
-    }
+  e.preventDefault();
+  if (invoiceProds.length === 0) {
+    alert("Agrega al menos un producto a la factura!");
+    return;
   }
 
-  // ── Abrir modal nueva factura ─────────────────────────────────────────────
+  const totalValue = Number(productsTotal);
+  if (!Number.isFinite(totalValue) || totalValue <= 0) {
+    alert("Agrega productos con valor para calcular el total.");
+    return;
+  }
+
+  if (!/^\d{14}$/.test(String(formData.rtn || ""))) {
+    alert("El RTN debe contener exactamente 14 dígitos numéricos.");
+    return;
+  }
+
+  setSaving(true);
+  try {
+    const selectedSupplier = suppliers.find((s) => String(s.id) === String(formData.supplier));
+    const created = await createInvoice({
+      ...formData,
+      supplierName: selectedSupplier?.name || String(formData.supplier || ""),
+      paymentMethod: formData.paymentMethod,
+      products: invoiceProds,
+      total: totalValue,
+    });
+
+    setInvoices((prev) => [created, ...prev]);
+
+    const newSummary = await getPurchasesSummary();
+    setSummary(newSummary);
+
+    setShowModal(false);
+    setFormData(EMPTY_FORM);
+    setInvoiceProds([]);
+    alert("Factura registrada y totales actualizados.");
+    const nuevoResumen = await getPurchasesSummary();
+    setSummary(nuevoResumen); 
+
+  } catch (error) {
+    console.error("Error al guardar:", error);
+    alert("Hubo un error al procesar la compra.");
+  } finally {
+    setSaving(false);
+  }
+}
+
   function handleOpenModal() {
-    setFormData({ ...EMPTY_FORM, supplier: suppliers[0] ?? "" });
-    setCurrentRow({ ...EMPTY_PRODUCT_ROW, productId: catalog[0]?.id ?? "" });
+    setFormData({ ...EMPTY_FORM, supplier: suppliers[0]?.id ?? "" });
+    setCurrentRow({ ...EMPTY_PRODUCT_ROW_WITH_PRICE, productId: catalog[0]?.id ?? "" });
     setInvoiceProds([]);
     setInvoiceImage(null);
+    setShowSupplierForm(false);
+    setShowProductForm(false);
+    setNewProduct({ code: "", name: "", image: "" });
+    setNewSupplier({ nombre: "", telefono: "" });
     setShowModal(true);
   }
 
-  // ── Eliminar factura ───────────────────────────────────────────────────────
-  async function handleConfirmDelete() {
-    if (!deleteTarget) return;
-    setDeleting(true);
+  // ── Crear proveedor ───────────────────────────────────────────────────────
+  async function handleCreateSupplier() {
+    if (!newSupplier.nombre.trim()) return;
+    
+    setSavingSupplier(true);
+    
     try {
-      await deleteInvoice(deleteTarget.id);
-      setInvoices((prev) => prev.filter((inv) => inv.id !== deleteTarget.id));
-      setDeleteTarget(null);
-      setSelectedInvoice(null);
+        const created = await createSupplier(newSupplier.nombre, newSupplier.telefono);
+        
+        // --- BLOQUE DE ÉXITO ---
+        // Recargar lista completa desde el backend
+        const lista = await getSuppliers();
+        setSuppliers(lista);
+        
+        // Seleccionar el proveedor recién creado en el formulario
+        setFormData((prev) => ({ ...prev, supplier: created.id }));
+        
+        // Limpiar y cerrar modal
+        setNewSupplier({ nombre: "", telefono: "" });
+        setShowSupplierForm(false);
+        
+        alert("Proveedor creado con éxito"); // Mensaje opcional de éxito
+
+    } catch (error) {
+        // --- BLOQUE DE ERROR ---
+        // Aquí capturamos el "El proveedor ya existe" que viene del backend
+        alert(error.message); 
+        
     } finally {
-      setDeleting(false);
+        // --- SE EJECUTA SIEMPRE AL FINAL ---
+        setSavingSupplier(false);
+    }
+}
+
+  async function handleCreateProduct() {
+    if (!newProduct.name.trim() || !newProduct.code.trim()) {
+      alert("Nombre y código del producto son obligatorios.");
+      return;
+    }
+
+    setSavingProduct(true);
+    try {
+      const created = await createProductFromPurchases(
+        newProduct.name.trim(),
+        newProduct.code.trim(),
+        newProduct.image.trim(),
+      );
+
+      const catalogo = await getAvailableProducts();
+      setCatalog(catalogo);
+      setCurrentRow((prev) => ({ ...prev, productId: created.id }));
+      setNewProduct({ code: "", name: "", image: "" });
+      setShowProductForm(false);
+      alert("Producto creado y listo para agregar a la factura.");
+    } catch (error) {
+      alert(error?.message || "No se pudo crear el producto.");
+    } finally {
+      setSavingProduct(false);
     }
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className={styles.page}>
 
@@ -151,8 +274,7 @@ export default function Purchases() {
           <p className={styles.subtitle}>Registra y administra compras a proveedores</p>
         </div>
         <button className={styles.btnPrimary} onClick={handleOpenModal}>
-          <Plus size={18} />
-          Nueva Factura
+          <Plus size={18} /> Nueva Factura
         </button>
       </div>
 
@@ -201,7 +323,7 @@ export default function Purchases() {
           )}
       </div>
 
-      {/* Tabla de historial */}
+      {/* Tabla historial */}
       <div className={styles.tableCard}>
         <div className={styles.tableHeader}>
           <h3 className={styles.tableTitle}>Historial de Facturas</h3>
@@ -236,12 +358,8 @@ export default function Purchases() {
                 : filtered.map((inv) => (
                     <tr key={inv.id}>
                       <td>
-                        <button
-                          className={styles.invoiceLink}
-                          onClick={() => setSelectedInvoice(inv)}
-                        >
-                          <Eye size={15} />
-                          {inv.invoiceNumber}
+                        <button className={styles.invoiceLink} onClick={() => setSelectedInvoice(inv)}>
+                          <Eye size={15} /> {inv.invoiceNumber}
                         </button>
                       </td>
                       <td className={styles.supplierName}>{inv.supplier}</td>
@@ -256,24 +374,20 @@ export default function Purchases() {
         </div>
       </div>
 
-      {/* ── Modal detalle de factura ── */}
+      {/* ── Modal detalle ── */}
       {selectedInvoice && (
         <div className={styles.modalOverlay} onClick={() => setSelectedInvoice(null)}>
           <div className={styles.modalLarge} onClick={(e) => e.stopPropagation()}>
             <div className={styles.modalHeader}>
               <div className={styles.modalHeaderLeft}>
                 <FileText size={20} color="#2563eb" />
-                <h2 className={styles.modalTitle}>
-                  Factura — {selectedInvoice.invoiceNumber}
-                </h2>
+                <h2 className={styles.modalTitle}>Factura — {selectedInvoice.invoiceNumber}</h2>
               </div>
               <button className={styles.modalClose} onClick={() => setSelectedInvoice(null)}>
                 <X size={20} />
               </button>
             </div>
-
             <div className={styles.detailBody}>
-              {/* Info general */}
               <div className={styles.detailGrid}>
                 <div className={styles.detailField}>
                   <span className={styles.detailLabel}>Proveedor</span>
@@ -292,20 +406,12 @@ export default function Purchases() {
                   <span className={styles.detailValueBlue}>L. {Number(selectedInvoice.total).toFixed(2)}</span>
                 </div>
               </div>
-
-              {/* Imagen */}
               {selectedInvoice.imageUrl && (
                 <div className={styles.invoiceImageWrap}>
                   <h4 className={styles.detailSectionTitle}>Imagen de la Factura</h4>
-                  <img
-                    src={selectedInvoice.imageUrl}
-                    alt="Factura"
-                    className={styles.invoiceImage}
-                  />
+                  <img src={selectedInvoice.imageUrl} alt="Factura" className={styles.invoiceImage} />
                 </div>
               )}
-
-              {/* Productos */}
               <div>
                 <h4 className={styles.detailSectionTitle}>Productos</h4>
                 <div className={styles.detailTableWrap}>
@@ -331,18 +437,9 @@ export default function Purchases() {
                   </table>
                 </div>
               </div>
-
-              {/* Acciones del detalle */}
               <div className={styles.detailFooter}>
                 <button className={styles.btnOutline} onClick={() => setSelectedInvoice(null)}>
                   Cerrar
-                </button>
-                <button
-                  className={styles.btnDanger}
-                  onClick={() => setDeleteTarget(selectedInvoice)}
-                >
-                  <Trash2 size={16} />
-                  Eliminar Factura
                 </button>
               </div>
             </div>
@@ -362,11 +459,10 @@ export default function Purchases() {
             </div>
 
             <form onSubmit={handleSave} className={styles.modalForm}>
-
-              {/* Datos de la factura */}
               <section className={styles.formSection}>
                 <h3 className={styles.sectionTitle}>Datos de la Factura</h3>
                 <div className={styles.formGrid}>
+
                   <div className={styles.formGroup}>
                     <label>Número de Factura</label>
                     <input
@@ -377,23 +473,89 @@ export default function Purchases() {
                       required
                     />
                   </div>
+
+                  {/* Proveedor con botón + */}
                   <div className={styles.formGroup}>
                     <label>Proveedor</label>
-                    <select
-                      value={formData.supplier}
-                      onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
-                    >
-                      {suppliers.map((s) => (
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </select>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      <select
+                        value={formData.supplier}
+                        onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
+                        style={{ flex: 1 }}
+                        required
+                      >
+                        <option value="">Seleccionar...</option>
+                        {suppliers.map((s) => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        className={styles.btnAddRow}
+                        onClick={() => setShowSupplierForm((v) => !v)}
+                        title="Agregar nuevo proveedor"
+                      >
+                        <Plus size={16} />
+                      </button>
+                    </div>
+
+                    {/* Mini formulario inline */}
+                    {showSupplierForm && (
+                      <div style={{
+                        marginTop: "10px",
+                        padding: "12px",
+                        background: "#f9fafb",
+                        borderRadius: "8px",
+                        border: "1px solid #e5e7eb",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "8px"
+                      }}>
+                        <input
+                          type="text"
+                          placeholder="Nombre del proveedor *"
+                          value={newSupplier.nombre}
+                          onChange={(e) => setNewSupplier({ ...newSupplier, nombre: e.target.value })}
+                        />
+                        <input
+                          type="text"
+                          placeholder="Teléfono (opcional)"
+                          value={newSupplier.telefono}
+                          onChange={(e) => setNewSupplier({ ...newSupplier, telefono: e.target.value })}
+                        />
+                        <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+                          <button
+                            type="button"
+                            className={styles.btnOutline}
+                            onClick={() => setShowSupplierForm(false)}
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            type="button"
+                            className={styles.btnPrimary}
+                            onClick={handleCreateSupplier}
+                            disabled={savingSupplier || !newSupplier.nombre.trim()}
+                          >
+                            {savingSupplier ? "Guardando..." : "Guardar proveedor"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
+
                   <div className={styles.formGroup}>
                     <label>RTN</label>
                     <input
                       type="text"
                       value={formData.rtn}
-                      onChange={(e) => setFormData({ ...formData, rtn: e.target.value })}
+                      onChange={(e) => {
+                        const onlyDigits = e.target.value.replace(/\D/g, "").slice(0, 14);
+                        setFormData({ ...formData, rtn: onlyDigits });
+                      }}
+                      inputMode="numeric"
+                      maxLength={14}
+                      pattern="\d{14}"
                       placeholder="08019990123456"
                       required
                     />
@@ -404,6 +566,32 @@ export default function Purchases() {
                       type="date"
                       value={formData.invoiceDate}
                       onChange={(e) => setFormData({ ...formData, invoiceDate: e.target.value })}
+                      required
+                    />
+                  </div>
+
+                  <div className={styles.formGroup}>
+                    <label>Método de pago</label>
+                    <select
+                      value={formData.paymentMethod}
+                      onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })}
+                      required
+                    >
+                      <option value="efectivo">Efectivo</option>
+                      <option value="transferencia">Transferencia</option>
+                      <option value="tarjeta">Tarjeta</option>
+                    </select>
+                  </div>
+
+                  <div className={styles.formGroup}>
+                    <label>Total de Factura (calculado)</label>
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      value={productsTotal.toFixed(2)}
+                      placeholder="0.00"
+                      readOnly
                       required
                     />
                   </div>
@@ -424,33 +612,87 @@ export default function Purchases() {
                   />
                 </label>
                 {invoiceImage && (
-                  <button
-                    type="button"
-                    className={styles.clearImage}
-                    onClick={() => setInvoiceImage(null)}
-                  >
+                  <button type="button" className={styles.clearImage} onClick={() => setInvoiceImage(null)}>
                     <X size={14} /> Quitar imagen
                   </button>
                 )}
               </section>
 
-              {/* Agregar productos */}
+              {/* Productos */}
               <section className={styles.formSection}>
                 <h3 className={styles.sectionTitle}>Productos</h3>
                 <div className={styles.productRowGrid}>
                   <div className={styles.formGroup}>
                     <label>Producto</label>
-                    <select
-                      value={currentRow.productId}
-                      onChange={(e) => setCurrentRow({ ...currentRow, productId: e.target.value })}
-                    >
-                      <option value="">Seleccionar...</option>
-                      {catalog.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.id} — {p.name}
-                        </option>
-                      ))}
-                    </select>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      <select
+                        value={currentRow.productId}
+                        onChange={(e) => setCurrentRow({ ...currentRow, productId: e.target.value })}
+                        style={{ flex: 1 }}
+                      >
+                        <option value="">Seleccionar producto...</option>
+                        {catalog.map((p) => (
+                          <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        className={styles.btnAddRow}
+                        onClick={() => setShowProductForm((v) => !v)}
+                        title="Agregar nuevo producto"
+                      >
+                        <Plus size={16} />
+                      </button>
+                    </div>
+
+                    {showProductForm && (
+                      <div style={{
+                        marginTop: "10px",
+                        padding: "12px",
+                        background: "#f9fafb",
+                        borderRadius: "8px",
+                        border: "1px solid #e5e7eb",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "8px"
+                      }}>
+                        <input
+                          type="text"
+                          placeholder="Código del producto *"
+                          value={newProduct.code}
+                          onChange={(e) => setNewProduct((prev) => ({ ...prev, code: e.target.value }))}
+                        />
+                        <input
+                          type="text"
+                          placeholder="Nombre del producto *"
+                          value={newProduct.name}
+                          onChange={(e) => setNewProduct((prev) => ({ ...prev, name: e.target.value }))}
+                        />
+                        <input
+                          type="text"
+                          placeholder="URL imagen (opcional)"
+                          value={newProduct.image}
+                          onChange={(e) => setNewProduct((prev) => ({ ...prev, image: e.target.value }))}
+                        />
+                        <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+                          <button
+                            type="button"
+                            className={styles.btnOutline}
+                            onClick={() => setShowProductForm(false)}
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            type="button"
+                            className={styles.btnPrimary}
+                            onClick={handleCreateProduct}
+                            disabled={savingProduct || !newProduct.name.trim() || !newProduct.code.trim()}
+                          >
+                            {savingProduct ? "Guardando..." : "Guardar producto"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div className={styles.formGroup}>
                     <label>Cantidad</label>
@@ -460,6 +702,28 @@ export default function Purchases() {
                       value={currentRow.quantity}
                       onChange={(e) => setCurrentRow({ ...currentRow, quantity: e.target.value })}
                       placeholder="0"
+                    />
+                  </div>
+                  <div className={styles.formGroup}>
+                    <label>Valor unitario</label>
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      value={currentRow.unitPrice || ""}
+                      onChange={(e) => setCurrentRow({ ...currentRow, unitPrice: e.target.value })}
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div className={styles.formGroup}>
+                    <label>Precio de venta</label>
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      value={currentRow.salePrice || ""}
+                      onChange={(e) => setCurrentRow({ ...currentRow, salePrice: e.target.value })}
+                      placeholder="0.00"
                     />
                   </div>
                   <div className={styles.formGroup}>
@@ -477,15 +741,17 @@ export default function Purchases() {
                   </div>
                 </div>
 
-                {/* Lista de productos agregados */}
                 {invoiceProds.length > 0 && (
                   <div className={styles.detailTableWrap}>
                     <table className={styles.table}>
                       <thead>
                         <tr>
-                          <th>ID Producto</th>
+                          <th>Código</th>
                           <th>Nombre</th>
                           <th>Cantidad</th>
+                          <th>Costo</th>
+                          <th>Precio venta</th>
+                          <th>Subtotal</th>
                           <th>Vencimiento</th>
                           <th></th>
                         </tr>
@@ -496,6 +762,9 @@ export default function Purchases() {
                             <td className={styles.muted}>{p.productId}</td>
                             <td className={styles.supplierName}>{p.productName}</td>
                             <td className={styles.muted}>{p.quantity}</td>
+                            <td className={styles.muted}>L. {Number(p.unitPrice || 0).toFixed(2)}</td>
+                            <td className={styles.muted}>L. {Number(p.salePrice || 0).toFixed(2)}</td>
+                            <td className={styles.muted}>L. {Number(p.subtotal || 0).toFixed(2)}</td>
                             <td className={styles.muted}>{p.expiryDate}</td>
                             <td>
                               <button
@@ -515,47 +784,17 @@ export default function Purchases() {
               </section>
 
               <div className={styles.modalFooter}>
-                <button
-                  type="button"
-                  className={styles.btnOutline}
-                  onClick={() => setShowModal(false)}
-                >
+                <button type="button" className={styles.btnOutline} onClick={() => setShowModal(false)}>
                   Cancelar
                 </button>
                 <button type="submit" className={styles.btnPrimary} disabled={saving}>
                   {saving ? "Registrando..." : "Registrar Factura"}
                 </button>
               </div>
-
             </form>
           </div>
         </div>
       )}
-
-      {/* ── Modal confirmar eliminación ── */}
-      {deleteTarget && (
-        <div className={styles.modalOverlay} onClick={() => setDeleteTarget(null)}>
-          <div className={styles.modalConfirm} onClick={(e) => e.stopPropagation()}>
-            <div className={styles.confirmIcon}>
-              <Trash2 size={28} color="#dc2626" />
-            </div>
-            <h3 className={styles.confirmTitle}>¿Eliminar factura?</h3>
-            <p className={styles.confirmMsg}>
-              Estás a punto de eliminar la factura <strong>{deleteTarget.invoiceNumber}</strong>.
-              Esta acción no se puede deshacer.
-            </p>
-            <div className={styles.confirmActions}>
-              <button className={styles.btnOutline} onClick={() => setDeleteTarget(null)}>
-                Cancelar
-              </button>
-              <button className={styles.btnDanger} onClick={handleConfirmDelete} disabled={deleting}>
-                {deleting ? "Eliminando..." : "Sí, eliminar"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
     </div>
   );
 }
